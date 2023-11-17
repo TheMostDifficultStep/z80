@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 
 // ReSharper disable InconsistentNaming
@@ -38,13 +39,17 @@ namespace z80
         private int interruptMode;
 
         private readonly IPorts ports;
+        private readonly List<Action> _rgIntrMode = new List<Action>(3);
 
         public Z80(Memory memory, IPorts ports)
         {
-            if (memory == null) throw new ArgumentNullException(nameof(memory));
-            if (ports == null) throw new ArgumentNullException(nameof(ports));
-            mem = memory;
-            this.ports = ports;
+            mem        = memory ?? throw new ArgumentNullException(nameof(memory));
+            this.ports = ports  ?? throw new ArgumentNullException(nameof(ports ));
+
+            _rgIntrMode.Add( InterruptMode0 );
+            _rgIntrMode.Add( InterruptMode1 );
+            _rgIntrMode.Add( InterruptMode2 );
+
             Reset();
         }
 
@@ -57,120 +62,126 @@ namespace z80
         private ushort Pc => (ushort)(registers[PC + 1] + (registers[PC] << 8));
         public bool Halt { get; private set; }
 
+        void InterruptMode0() {
+            // This is not quite correct, as it only runs a RST xx
+            // Instead, it should also support any other instruction
+            var instruction = ports.Data;
+            var stack = Sp;
+            mem[--stack] = (byte)(Pc >> 8);
+            mem[--stack] = (byte)(Pc);
+            registers[SP] = (byte)(stack >> 8);
+            registers[SP + 1] = (byte)(stack);
+            registers[PC] = 0x00;
+            registers[PC + 1] = (byte)(instruction & 0x38);
+            Wait(17);
+#if (DEBUG)
+            Log("MI 0");
+#endif
+            Halt = false;
+        }
+
+        void InterruptMode1() {
+            var stack = Sp;
+            mem[--stack] = (byte)(Pc >> 8);
+            mem[--stack] = (byte)(Pc);
+            registers[SP] = (byte)(stack >> 8);
+            registers[SP + 1] = (byte)(stack);
+            registers[PC] = 0x00;
+            registers[PC + 1] = 0x38;
+#if (DEBUG)
+            Log("MI 1");
+#endif
+            Wait(17);
+            Halt = false;
+        }
+
+        void InterruptMode2() {
+            var vector = ports.Data;
+            var stack = Sp;
+            mem[--stack] = (byte)(Pc >> 8);
+            mem[--stack] = (byte)(Pc);
+            registers[SP] = (byte)(stack >> 8);
+            registers[SP + 1] = (byte)(stack);
+            var address = (ushort)((registers[I] << 8) + vector);
+            registers[PC] = mem[address++];
+            registers[PC + 1] = mem[address];
+#if (DEBUG)
+            Log("MI 2");
+#endif
+            Wait(17);
+            Halt = false;
+        }
+
+        void NonMaskableInt() {
+            var stack = Sp;
+            mem[--stack] = (byte)(Pc >> 8);
+            mem[--stack] = (byte)(Pc);
+            registers[SP] = (byte)(stack >> 8);
+            registers[SP + 1] = (byte)(stack);
+            registers[PC] = 0x00;
+            registers[PC + 1] = 0x66;
+            IFF1 = IFF2;
+            IFF1 = false;
+#if (DEBUG)
+            Log("NMI");
+#endif
+            Wait(17);
+            Halt = false;
+        }
+
+        void HighStuff( byte r, byte lo ) {
+            var useHL1 = r == 6;
+            var useHL2 = lo == 6;
+
+            if (useHL2 && useHL1)
+            {
+#if (DEBUG)
+                Log("HALT");
+#endif
+                Halt = true;
+                return;
+            }
+            var reg = useHL2 ? mem[Hl] : registers[lo];
+
+            if (useHL1)
+                mem[Hl] = reg;
+            else
+                registers[r] = reg;
+
+            Wait(useHL1 || useHL2 ? 7 : 4);
+#if (DEBUG)
+            Log($"LD {(useHL1 ? "(HL)" : RName(r))}, {(useHL2 ? "(HL)" : RName(lo))}");
+#endif
+            return;
+        }
+
         public void Parse()
         {
-            if (ports.NMI)
-            {
-                var stack = Sp;
-                mem[--stack] = (byte)(Pc >> 8);
-                mem[--stack] = (byte)(Pc);
-                registers[SP] = (byte)(stack >> 8);
-                registers[SP + 1] = (byte)(stack);
-                registers[PC] = 0x00;
-                registers[PC + 1] = 0x66;
-                IFF1 = IFF2;
-                IFF1 = false;
-#if (DEBUG)
-                Log("NMI");
-#endif
-                Wait(17);
-                Halt = false;
+            if (ports.NMI) {
+                NonMaskableInt();
                 return;
             }
-            if (IFF1 && ports.MI)
-            {
+            if (IFF1 && ports.MI) {
                 IFF1 = false;
                 IFF2 = false;
-                switch (interruptMode)
-                {
-                    case 0:
-                        {
-                            // This is not quite correct, as it only runs a RST xx
-                            // Instead, it should also support any other instruction
-                            var instruction = ports.Data;
-                            var stack = Sp;
-                            mem[--stack] = (byte)(Pc >> 8);
-                            mem[--stack] = (byte)(Pc);
-                            registers[SP] = (byte)(stack >> 8);
-                            registers[SP + 1] = (byte)(stack);
-                            registers[PC] = 0x00;
-                            registers[PC + 1] = (byte)(instruction & 0x38);
-                            Wait(17);
 
-#if (DEBUG)
-                            Log("MI 0");
-#endif
-                            Halt = false;
-                            return;
-                        }
-                    case 1:
-                        {
-                            var stack = Sp;
-                            mem[--stack] = (byte)(Pc >> 8);
-                            mem[--stack] = (byte)(Pc);
-                            registers[SP] = (byte)(stack >> 8);
-                            registers[SP + 1] = (byte)(stack);
-                            registers[PC] = 0x00;
-                            registers[PC + 1] = 0x38;
-#if (DEBUG)
-                            Log("MI 1");
-#endif
-                            Wait(17);
-                            Halt = false;
-                            return;
-                        }
-                    case 2:
-                        {
-                            var vector = ports.Data;
-                            var stack = Sp;
-                            mem[--stack] = (byte)(Pc >> 8);
-                            mem[--stack] = (byte)(Pc);
-                            registers[SP] = (byte)(stack >> 8);
-                            registers[SP + 1] = (byte)(stack);
-                            var address = (ushort)((registers[I] << 8) + vector);
-                            registers[PC] = mem[address++];
-                            registers[PC + 1] = mem[address];
-#if (DEBUG)
-                            Log("MI 2");
-#endif
-                            Wait(17);
-                            Halt = false;
-                            return;
-                        }
-                }
+                _rgIntrMode[interruptMode]();
+
                 return;
             }
-            if (Halt) return;
+            if (Halt) 
+                return;
+
             var mc = Fetch();
             var hi = (byte)(mc >> 6);
             var lo = (byte)(mc & 0x07);
-            var r = (byte)((mc >> 3) & 0x07);
-            if (hi == 1)
-            {
-                var useHL1 = r == 6;
-                var useHL2 = lo == 6;
-                if (useHL2 && useHL1)
-                {
-#if(DEBUG)
-                    Log("HALT");
-#endif
-                    Halt = true;
-                    return;
-                }
-                var reg = useHL2 ? mem[Hl] : registers[lo];
+            var  r = (byte)((mc >> 3) & 0x07);
 
-                if (useHL1)
-                    mem[Hl] = reg;
-                else
-                    registers[r] = reg;
-                Wait(useHL1 || useHL2 ? 7 : 4);
-#if (DEBUG)
-                Log($"LD {(useHL1 ? "(HL)" : RName(r))}, {(useHL2 ? "(HL)" : RName(lo))}");
-#endif
+            if (hi == 1) {
+                HighStuff( r, lo );
                 return;
             }
-            switch (mc)
-            {
+            switch (mc) {
                 case 0xCB:
                     ParseCB();
                     return;
@@ -3548,8 +3559,14 @@ namespace z80
             return ret;
         }
 
+        /// <summary>
+        /// This piece of work complains and is not described. Going
+        /// to just chuck it for the moment.
+        /// </summary>
+        /// <param name="t"></param>
         private void Wait(int t)
         {
+/*
             registers[R] += (byte)((t + 3) / 4);
             const int realTicksPerTick = 250; // 4MHz
             var ticks = t * realTicksPerTick;
@@ -3567,6 +3584,7 @@ namespace z80
 #endif
                 _clock = DateTime.UtcNow;
             }
+*/
         }
 
         private void SwapReg8(byte r1, byte r2)
@@ -3606,7 +3624,7 @@ namespace z80
             Console.ForegroundColor = ConsoleColor.White;
         }
 
-        private static void Log(string text)
+        [Conditional("DEBUG")]private static void Log(string text)
         {
             Console.CursorLeft = 20;
             Console.ForegroundColor = ConsoleColor.Cyan;
