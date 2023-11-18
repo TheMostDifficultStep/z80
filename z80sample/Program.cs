@@ -10,12 +10,19 @@ namespace z80Sample
         {
             var ram = new byte[65536];
             Array.Clear(ram, 0, ram.Length);
-            var inp = File.ReadAllBytes("48.rom");
-            if (inp.Length != 16384) throw new InvalidOperationException("Invalid 48.rom file");
 
-            Array.Copy(inp, ram, 16384);
+            //var inp = File.ReadAllBytes("48.rom");
+            //if (inp.Length != 16384) 
+            //    throw new InvalidOperationException("Invalid 48.rom file");
+            //Array.Copy(inp, ram, 16384);
 
-            var myZ80 = new Z80(new Memory(ram, 16384), new SamplePorts());
+            ushort iCount=0;
+            foreach( byte b in File.ReadAllBytes( "tinybasic2dms.bin" ) ) {
+                ram[iCount++] = b;
+            }
+
+
+            var myZ80 = new Z80(new Memory(ram, iCount), new SamplePorts());
             Console.Clear();
             //var counter = 0;
             while (!myZ80.Halt)
@@ -55,12 +62,25 @@ namespace z80Sample
     {
         public byte ReadPort(ushort port)
         {
-            Console.WriteLine($"IN 0x{port:X4}");
+            //Console.WriteLine($"IN 0x{port:X4}");
+
+            if( port == 3 ) {
+                if( Console.KeyAvailable ) {
+                    ConsoleKeyInfo oInfo = Console.ReadKey();
+
+                    if( oInfo.KeyChar < 256 )
+                    {
+                        return (byte)oInfo.KeyChar;
+                    }
+                }
+            }
+
             return 0;
         }
         public void WritePort(ushort port, byte value)
         {
-            Console.WriteLine($"OUT 0x{port:X4}, 0x{value:X2}");
+            //Console.WriteLine($"OUT 0x{port:X4}, 0x{value:X2}");
+            Console.Write( (char)value );
         }
         public bool NMI => false;
         public bool MI => false;

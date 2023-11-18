@@ -7,6 +7,105 @@ using System.Threading;
 
 namespace z80
 {
+    public class Z80Instructions {
+        public readonly string[] _rgInstruction = new string[256];
+
+        public Z80Instructions() { 
+            for (int i = 0;i<_rgInstruction.Length;i++) {
+                _rgInstruction[i] = null;
+            }
+            _rgInstruction[0] = "Nop";
+            _rgInstruction[1] = "ld bc, nn";
+            _rgInstruction[2] = "ld(bc), a";
+            _rgInstruction[3] = "inc bc";
+            _rgInstruction[4] = "inc b";
+            _rgInstruction[5] = "dec b";
+            _rgInstruction[6] = "ld b, n";
+            _rgInstruction[7] = "rlca";
+            _rgInstruction[8] = "ex af, af'";
+            _rgInstruction[9] = "add hl, bc";
+            _rgInstruction[0xa] = "ld a, (bc)";
+            _rgInstruction[0xb] = "dec bc";
+            _rgInstruction[0xc] = "inc c";
+            _rgInstruction[0xd] = "dec c";
+            _rgInstruction[0xe] = "ld c, n";
+            _rgInstruction[0xf] = "rrca";
+
+            _rgInstruction[0x16] = "ld d, n";
+
+            _rgInstruction[0x30] = "jr nc, d";
+            _rgInstruction[0x31] = "ld sp, nn";
+            _rgInstruction[0x32] = "ld (nn), a";
+            _rgInstruction[0x33] = "inc sp";
+            _rgInstruction[0x34] = "inc (hl)";
+            _rgInstruction[0x35] = "dec (hl)";
+            _rgInstruction[0x36] = "ld (hl), n";
+            _rgInstruction[0x37] = "scf -set c flag-";
+            _rgInstruction[0x38] = "jr c, d";
+            _rgInstruction[0x39] = "add hl, sp";
+            _rgInstruction[0x3a] = "ld a, (nn)";
+            _rgInstruction[0x3b] = "dec sp";
+            _rgInstruction[0x3c] = "inc a";
+            _rgInstruction[0x3d] = "dec a";
+            _rgInstruction[0x3e] = "ld a, n";
+            _rgInstruction[0x3f] = "ccf"; // invert carry flag
+
+            _rgInstruction[0xb7] = "or a";
+
+            _rgInstruction[0xc0] = "ret nz";
+            _rgInstruction[0xc1] = "pop bc";
+            _rgInstruction[0xc2] = "jp nz, nn";
+            _rgInstruction[0xc3] = "jp nn";
+            _rgInstruction[0xc4] = "call nz, nn";
+            _rgInstruction[0xc5] = "push bc";
+            _rgInstruction[0xc6] = "add a, n";
+            _rgInstruction[0xc7] = "rst 00h";
+            _rgInstruction[0xc8] = "ret z";
+            _rgInstruction[0xc9] = "ret";
+            _rgInstruction[0xca] = "jp z, nn";
+            _rgInstruction[0xcb] = "Bit";
+            _rgInstruction[0xcc] = "call z, nn";
+            _rgInstruction[0xcd] = "call nn";
+            _rgInstruction[0xce] = "adc a, n";
+            _rgInstruction[0xcf] = "rst 08h";
+
+            _rgInstruction[0xd0] = "ret ncarry";
+            _rgInstruction[0xd1] = "pop de";
+            _rgInstruction[0xd2] = "jc ncarry, nn";
+            _rgInstruction[0xd3] = "out port(n), a";
+            _rgInstruction[0xd4] = "call ncarry, nn";
+            _rgInstruction[0xd5] = "push de";
+            _rgInstruction[0xd6] = "sub n";
+            _rgInstruction[0xd7] = "rst 10h";
+            _rgInstruction[0xd8] = "ret carry";
+            _rgInstruction[0xd9] = "exx";
+            _rgInstruction[0xda] = "jmp carry, nn";
+            _rgInstruction[0xdb] = "in a, port(n)";
+            _rgInstruction[0xdc] = "call carry, nn";
+            _rgInstruction[0xdd] = "->ix";
+            _rgInstruction[0xde] = "sbc a, n";
+            _rgInstruction[0xdf] = "rst 18h";
+
+            _rgInstruction[0xe0] = "ret po unset";
+            _rgInstruction[0xe1] = "pop hl";
+            _rgInstruction[0xe2] = "jp po unset, nn";
+            _rgInstruction[0xe3] = "ex (sp), hl";
+            _rgInstruction[0xe4] = "call po unset, nn";
+            _rgInstruction[0xe5] = "push hl";
+            _rgInstruction[0xe6] = "and n";
+            _rgInstruction[0xe7] = "rst 20h";
+            _rgInstruction[0xe8] = "ret pe";
+            _rgInstruction[0xe9] = "jp (hl)";
+            _rgInstruction[0xea] = "jp pe set, nn";
+            _rgInstruction[0xeb] = "ex de, hl";
+            _rgInstruction[0xec] = "call pe, nn";
+            _rgInstruction[0xed] = "Misc.";
+            _rgInstruction[0xee] = "xor n";
+            _rgInstruction[0xef] = "rst 28h";
+
+            _rgInstruction[0xf5] = "push af";
+        }
+    }
     public class Z80
     {
         private const byte B = 0;
@@ -40,6 +139,7 @@ namespace z80
 
         private readonly IPorts ports;
         private readonly List<Action> _rgIntrMode = new List<Action>(3);
+        private readonly Z80Instructions _oLookup = new Z80Instructions();
 
         public Z80(Memory memory, IPorts ports)
         {
@@ -1349,7 +1449,7 @@ namespace z80
                     }
                 case 0xDB:
                     {
-                        var port = Fetch() + (registers[A] << 8);
+                        var port = Fetch() /* + (registers[A] << 8) */;
                         registers[A] = ports.ReadPort((ushort)port);
 #if (DEBUG)
                         Log($"IN A, (0x{port:X2})");
@@ -1359,7 +1459,7 @@ namespace z80
                     }
                 case 0xD3:
                     {
-                        var port = Fetch() + (registers[A] << 8);
+                        var port = Fetch() /* + (registers[A] << 8) */;
                         ports.WritePort((ushort)port, registers[A]);
 #if (DEBUG)
                         Log($"OUT (0x{port:X2}), A");
@@ -3609,28 +3709,41 @@ namespace z80
         }
 
 #if (DEBUG)
-        private static bool debug_atStart = true;
+        private static int iOutputCount = 0;
 
-        private static void LogMemRead(ushort addr, byte val)
+        private void LogMemRead(ushort addr, byte val)
         {
-            if (debug_atStart)
-            {
-                Console.ForegroundColor = ConsoleColor.Green;
+            if( iOutputCount == 0 ) {
+                Console.WriteLine();
                 Console.Write($"{addr:X4} ");
-                debug_atStart = false;
+                iOutputCount++;
             }
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.Write($"{val:X2} ");
+            if( iOutputCount == 1 ) {
+                if( _oLookup._rgInstruction[val] != null ) {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.Write($"{val:X2} ");
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.Write( _oLookup._rgInstruction[val] );
+                    Console.Write( ' ' );
+                } else {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.Write($"{val:X2} ");
+                }
+            } else {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write($"{val:X2} ");
+            }
             Console.ForegroundColor = ConsoleColor.White;
+            iOutputCount += 1;
         }
 
         [Conditional("DEBUG")]private static void Log(string text)
         {
-            Console.CursorLeft = 20;
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine(text);
-            Console.ForegroundColor = ConsoleColor.White;
-            debug_atStart = true;
+            //Console.CursorLeft = 20;
+            //Console.ForegroundColor = ConsoleColor.Cyan;
+            //Console.WriteLine(text);
+            //Console.ForegroundColor = ConsoleColor.White;
+            iOutputCount = 0;
         }
 
         private static string RName(byte n)
