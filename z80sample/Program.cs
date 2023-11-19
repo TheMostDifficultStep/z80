@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using z80;
 
@@ -6,21 +7,73 @@ namespace z80Sample
 {
     internal class Program
     {
+        private static byte[] InitMe() {
+            List<byte> rgBytes = new List<byte>();
+
+            rgBytes.Add( 0x31 ); // sp, nn
+            rgBytes.Add( 0x00 );
+            rgBytes.Add( 0x10 );
+
+            rgBytes.Add( 0xc3 ); // jp nn
+
+            int iStart_Patch = rgBytes.Count;
+
+            rgBytes.Add( 0x00 );
+            rgBytes.Add( 0x00 );
+
+            int iHello = rgBytes.Count;
+
+            rgBytes.Add( (byte)'h' );
+            rgBytes.Add( (byte)'e' );
+            rgBytes.Add( (byte)'l' );
+            rgBytes.Add( (byte)'l' );
+            rgBytes.Add( (byte)'o' );
+            rgBytes.Add( 0x00 );
+
+            int iStart = rgBytes.Count;
+            rgBytes[iStart_Patch] = (byte)iStart; // just set low byte.
+
+            rgBytes.Add( 0x21 );  // ld hl, nn
+            rgBytes.Add( (byte)iHello );
+            rgBytes.Add( 0x00 );
+
+            int iLoop = rgBytes.Count;
+
+            rgBytes.Add( 0x7e ); // ld a (hl)
+            rgBytes.Add( 0xfe ); // cmp 0
+            rgBytes.Add( 0x00 );
+            rgBytes.Add( 0xca ); // C2 jmp nz nn; CA-> JMP Z NN
+            rgBytes.Add( (byte)iStart );
+            rgBytes.Add( 0x00 );
+            rgBytes.Add( 0xd3 ); // Out, n
+            rgBytes.Add( 0x03 );
+            rgBytes.Add( 0x23 ); // inc hl
+            rgBytes.Add( 0xc3 ); // jp nn
+            rgBytes.Add( (byte)iLoop );
+            rgBytes.Add( 0x00 );
+
+            return rgBytes.ToArray();
+        }
+
         private static void Main(string[] args)
         {
             var ram = new byte[65536];
             Array.Clear(ram, 0, ram.Length);
 
             //var inp = File.ReadAllBytes("48.rom");
-            //if (inp.Length != 16384) 
+            //if( inp.Length != 16384 )
             //    throw new InvalidOperationException("Invalid 48.rom file");
-            //Array.Copy(inp, ram, 16384);
+            //Array.Copy(inp, ram, inp.Length);
 
-            ushort iCount=0;
-            foreach( byte b in File.ReadAllBytes( "tinybasic2dms.bin" ) ) {
-                ram[iCount++] = b;
-            }
-
+            //ushort iCount = 0;
+            //foreach( byte b in File.ReadAllBytes("tinybasic2dms.bin") ) {
+            //    ram[iCount++] = b;
+            //}
+            
+            ushort iCount = 0;
+            foreach( byte b in InitMe() ) {
+                ram[iCount++] = b; 
+            }  
 
             var myZ80 = new Z80(new Memory(ram, iCount), new SamplePorts());
             Console.Clear();
@@ -60,18 +113,17 @@ namespace z80Sample
 
     class SamplePorts : IPorts
     {
+        int iCount = 0;
         public byte ReadPort(ushort port)
         {
             //Console.WriteLine($"IN 0x{port:X4}");
 
-            if( port == 3 ) {
-                if( Console.KeyAvailable ) {
-                    ConsoleKeyInfo oInfo = Console.ReadKey();
+            if( Console.KeyAvailable ) {
+                ConsoleKeyInfo oInfo = Console.ReadKey();
 
-                    if( oInfo.KeyChar < 256 )
-                    {
-                        return (byte)oInfo.KeyChar;
-                    }
+                if( oInfo.KeyChar < 256 )
+                {
+                    return (byte)oInfo.KeyChar;
                 }
             }
 
