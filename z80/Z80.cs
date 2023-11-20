@@ -1449,7 +1449,7 @@ namespace z80
                     }
                 case 0xDB:
                     {
-                        var port = Fetch() /* + (registers[A] << 8) */;
+                        var port = Fetch(); // + (registers[A] << 8);
                         registers[A] = ports.ReadPort((ushort)port);
 #if (DEBUG)
                         Log($"IN A, (0x{port:X2})");
@@ -1459,7 +1459,7 @@ namespace z80
                     }
                 case 0xD3:
                     {
-                        var port = Fetch() /* + (registers[A] << 8) */;
+                        var port = Fetch(); // + (registers[A] << 8);
                         ports.WritePort((ushort)port, registers[A]);
 #if (DEBUG)
                         Log($"OUT (0x{port:X2}), A");
