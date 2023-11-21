@@ -138,14 +138,11 @@ namespace z80Sample
 
     class SamplePorts : IPorts
     {
-
         const int UART_LSR_ERR = 0x80; // Error
         const int UART_LSR_ETX = 0x40; // Transmit empty
         const int UART_LSR_ETH = 0x20; // Transmit holding register empty
         const int UART_LSR_RDY = 0x01; // Data ready
 
-        const int REG_RBR = 0; // Receive buffer (byte recieved)
-        const int REG_THR = 0; // Transmitter holding (byte to tx)
         const int REG_IER = 1; // Interrupt enable
             //0	Received data available
             //1	Transmitter holding register empty
@@ -168,14 +165,7 @@ namespace z80Sample
             //  57,600	2	    0x02	0x00
             //  115,200	1	    0x01	0x00
         
-        /// <summary>Line status</summary>
-        const int REG_LSR = 5; 
-        
-        /// <summary>Modem status</summary>
-        const int REG_MSR = 6;
-        /// <summary>Scratch</summary>
-        const int REG_SCR = 7; 
-
+     
         readonly Action<UART, byte> [,] _rgWritMatrix = new Action<UART,byte>[2,8];
         readonly Func  <UART, byte> [,] _rgReadMatrix = new Func  <UART,byte>[2,8];
 
@@ -186,28 +176,11 @@ namespace z80Sample
         public void EmptyWriteMethod( UART oUart, byte b ) {
         }
 
-        enum LineStatus : int {
-            Data_available = 0,
-            Overrun_error,
-            Parity_error,
-            Framing_error,
-            Break_signal_received,
-            THR_is_empty,
-            THR_is_empty_and_line_is_idle,
-            Errornous_data_in_FIFO
-        }
         /// <summary>
-        /// Get the line status. Note: This can only be read by an IN command.
+        /// data bits, stop bits, parity, break sig, dlab.
         /// </summary>
-        /// <seealso cref="LineStatus"/>
-        public byte Read_LineStatus( UART oUart ) {
-            if( Console.KeyAvailable ) {
-                return (int)LineStatus.Data_available | 0b01100000;
-            }
-
-            return (int)LineStatus.THR_is_empty;
-        }
-
+        /// <param name="oUart"></param>
+        /// <returns></returns>
         public byte Read_LineControl( UART oUart ) {
             return oUart._bLineControl; // 8 data bits, 1 stop bit, no parity
         }
@@ -237,18 +210,58 @@ namespace z80Sample
             oUart._bLineControl = bValue;
         }
 
+        enum LineStatus : byte {
+            Data_available         = 0b00000001,
+            Overrun_error          = 0b00000010,
+            Parity_error           = 0b00000100,
+            Framing_error          = 0b00001000,
+            Break_signal_received  = 0b00010000,
+            THR_is_empty           = 0b00100000,
+            THR_is_empty_n_idle    = 0b01000000,
+            Errornous_data_in_FIFO = 0b10000000
+        } 
+        /// <summary>
+        /// Get the line status. Note: This can only be read by an IN command.
+        /// </summary>
+        /// <seealso cref="LineStatus"/>
+        public byte Read_LineStatus( UART oUart ) {
+            if( Console.KeyAvailable ) {
+                return (byte)LineStatus.Data_available;
+            }
+
+            return (byte)LineStatus.THR_is_empty;
+        }
+
         public byte Read_RX_Buffer( UART oUart ) {
-            if( oUart._iUart == 0 ) {
-                if( Console.KeyAvailable ) {
-                    ConsoleKeyInfo oKey = Console.ReadKey();
-                    return (byte)oKey.KeyChar;
-                }
+            if( Console.KeyAvailable ) {
+                ConsoleKeyInfo oKey = Console.ReadKey();
+                return (byte)oKey.KeyChar;
             }
             return 0;
         }
 
         public void Writ_TX_Holding( UART oUart, byte bValue ) {
             Console.Write( (char)bValue );
+        }
+
+        protected byte SetBit( int iBit ) {
+            switch( iBit ) {
+                case 0:
+                    return 1;
+                case 1:
+                    return 2;
+                case 3:
+                    return 4;
+                case 4:
+                    return 8;
+                case 5:
+                    return 16;
+                case 6:
+                    return 32;
+                case 7:
+                    return 64;
+            }
+            throw new ArgumentOutOfRangeException();
         }
 
             //int iStatus = ( bValue >> 1 & 0b00000111 );
@@ -271,9 +284,9 @@ namespace z80Sample
             //	    11xxxxxx	FIFO enabled	–
         public byte Read_Interrupt_ID( UART oUart ) {
             if( Console.KeyAvailable )
-                return 0b00000101;
+                return 0b11000100;
 
-           return 0b00000011;
+           return 0b11000010;
         }
 
             //Bit	Value	Description
@@ -293,6 +306,10 @@ namespace z80Sample
             //	    01xxxxxx	4 bytes
             //	    10xxxxxx	8 bytes
             //	    11xxxxxx	14 bytes
+
+        /// <summary>
+        /// This is a write only register...
+        /// </summary>
         public void Writ_FIFO_Control( UART oUart, byte bValue ) {
             bool bFifoEna   = ( bValue & 0b00000001 ) > 0;
             bool bClrRxFifo = ( bValue & 0b00000010 ) > 0;
@@ -370,17 +387,19 @@ namespace z80Sample
             //Console.WriteLine($"IN 0x{port:X4}");
 
             int iPort = sPortAddr % 8;
+            int iDLAB = DLAB(sPortAddr);
 
-            return _rgReadMatrix[DLAB(sPortAddr), iPort]( FindUart( sPortAddr ) );
+            return _rgReadMatrix[iDLAB, iPort]( FindUart( sPortAddr ) );
         }
         public void WritePort(ushort sPortAddr, byte value)
         {
             int iPort = sPortAddr % 8;
+            int iDLAB = DLAB(sPortAddr);
 
             //Console.WriteLine($"OUT 0x{port:X4}, 0x{value:X2}");
             //Console.Write( (char)value );
 
-            _rgWritMatrix[DLAB(sPortAddr), iPort]( FindUart( sPortAddr ), value );
+            _rgWritMatrix[iDLAB, iPort]( FindUart( sPortAddr ), value );
         }
         public bool NMI => false;
         public bool MI => false;

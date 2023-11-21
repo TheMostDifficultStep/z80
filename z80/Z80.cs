@@ -3713,28 +3713,28 @@ namespace z80
 
         private void LogMemRead(ushort addr, byte val)
         {
-            if( iOutputCount == 0 ) {
-                Console.WriteLine();
-                Console.Write($"{addr:X4} ");
-                iOutputCount++;
-            }
-            if( iOutputCount == 1 ) {
-                if( _oLookup._rgInstruction[val] != null ) {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.Write($"{val:X2} ");
-                    Console.ForegroundColor = ConsoleColor.Cyan;
-                    Console.Write( _oLookup._rgInstruction[val] );
-                    Console.Write( ' ' );
-                } else {
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.Write($"{val:X2} ");
-                }
-            } else {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.Write($"{val:X2} ");
-            }
-            Console.ForegroundColor = ConsoleColor.White;
-            iOutputCount += 1;
+            //if( iOutputCount == 0 ) {
+            //    Console.WriteLine();
+            //    Console.Write($"{addr:X4} ");
+            //    iOutputCount++;
+            //}
+            //if( iOutputCount == 1 ) {
+            //    if( _oLookup._rgInstruction[val] != null ) {
+            //        Console.ForegroundColor = ConsoleColor.Red;
+            //        Console.Write($"{val:X2} ");
+            //        Console.ForegroundColor = ConsoleColor.Cyan;
+            //        Console.Write( _oLookup._rgInstruction[val] );
+            //        Console.Write( ' ' );
+            //    } else {
+            //        Console.ForegroundColor = ConsoleColor.Yellow;
+            //        Console.Write($"{val:X2} ");
+            //    }
+            //} else {
+            //    Console.ForegroundColor = ConsoleColor.Yellow;
+            //    Console.Write($"{val:X2} ");
+            //}
+            //Console.ForegroundColor = ConsoleColor.White;
+            //iOutputCount += 1;
         }
 
         [Conditional("DEBUG")]private static void Log(string text)
