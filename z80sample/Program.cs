@@ -10,6 +10,7 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using z80;
 using static System.Net.Mime.MediaTypeNames;
+using static z80Sample.SamplePorts;
 
 namespace z80Sample
 {
@@ -137,6 +138,7 @@ namespace z80Sample
 
     class SamplePorts : IPorts
     {
+
         const int UART_LSR_ERR = 0x80; // Error
         const int UART_LSR_ETX = 0x40; // Transmit empty
         const int UART_LSR_ETH = 0x20; // Transmit holding register empty
@@ -165,45 +167,51 @@ namespace z80Sample
             //  38,400	3	    0x03	0x00
             //  57,600	2	    0x02	0x00
             //  115,200	1	    0x01	0x00
+        
+        /// <summary>Line status</summary>
+        const int REG_LSR = 5; 
+        
+        /// <summary>Modem status</summary>
+        const int REG_MSR = 6;
+        /// <summary>Scratch</summary>
+        const int REG_SCR = 7; 
 
-        /// <summary>Interrupt identification</summary>
-        const int REG_IIR = 2;
-            //Bit	Value	Description	Reset by
-            //0	    xxxxxxx0	Interrupt pending	–
-            //	    xxxxxxx1	No interrupt pending	–
-            //3,2,1	xxxx000x	Modem status change	MSR read
-            //	    xxxx001x	Transmitter holding register empty	IIR read or THR write
-            //	    xxxx010x	Received data available	RBR read
-            //	    xxxx011x	Line status change	LSR read
-            //	    xxxx110x	Character timeout (16550)	RBR read
-            //4	    xxx0xxxx	Reserved	–
-            //5	    xx0xxxxx	Reserved (8250, 16450, 16550)	–
-            //	    xx1xxxxx	64 byte FIFO enabled (16750)	–
-            //7,6	00xxxxxx	No FIFO	–
-            //	    01xxxxxx	Unusable FIFO (16550 only)	–
-            //	    11xxxxxx	FIFO enabled	–
-        /// <summary>Flow control FIFO control register..</summary>
-        const int REG_FCT = 2;
-            //Bit	Value	Description
-            //0	    xxxxxxx0	Disable FIFO’s
-            //	    xxxxxxx1	Enable FIFO’s
-            //1	    xxxxxx0x	–
-            //	    xxxxxx1x	Clear receive FIFO
-            //2	    xxxxx0xx	–
-            //	    xxxxx1xx	Clear transmit FIFO
-            //3	    xxxx0xxx	Select DMA mode 0
-            //	    xxxx1xxx	Select DMA mode 1
-            //4	    xxx0xxxx	Reserved
-            //5	    xx0xxxxx	Reserved (8250, 16450, 16550)
-            //	    xx1xxxxx	Enable 64 byte FIFO (16750)
-            //		Receive FIFO interrupt trigger level:
-            //7,6	00xxxxxx	1 byte
-            //	    01xxxxxx	4 bytes
-            //	    10xxxxxx	8 bytes
-            //	    11xxxxxx	14 bytes
+        readonly Action<UART, byte> [,] _rgWritMatrix = new Action<UART,byte>[2,8];
+        readonly Func  <UART, byte> [,] _rgReadMatrix = new Func  <UART,byte>[2,8];
 
-        /// <summary>Line control</summary>
-        const int REG_LCR = 3; /// <summary>Line control</summary>
+        public byte EmptyReadMethod( UART oUart ) {
+            return 0;
+        }
+
+        public void EmptyWriteMethod( UART oUart, byte b ) {
+        }
+
+        enum LineStatus : int {
+            Data_available = 0,
+            Overrun_error,
+            Parity_error,
+            Framing_error,
+            Break_signal_received,
+            THR_is_empty,
+            THR_is_empty_and_line_is_idle,
+            Errornous_data_in_FIFO
+        }
+        /// <summary>
+        /// Get the line status. Note: This can only be read by an IN command.
+        /// </summary>
+        /// <seealso cref="LineStatus"/>
+        public byte Read_LineStatus( UART oUart ) {
+            if( Console.KeyAvailable ) {
+                return (int)LineStatus.Data_available | 0b01100000;
+            }
+
+            return (int)LineStatus.THR_is_empty;
+        }
+
+        public byte Read_LineControl( UART oUart ) {
+            return oUart._bLineControl; // 8 data bits, 1 stop bit, no parity
+        }
+
             //1,0	xxxxxx00	5 data bits
             //	    xxxxxx01	6 data bits
             //	    xxxxxx10	7 data bits
@@ -221,98 +229,158 @@ namespace z80Sample
             //	    x1xxxxxx	Break signal enabled
             //7	    0xxxxxxx	DLAB : RBR, THR and IER accessible
             //	    1xxxxxxx	DLAB : DLL and DLM accessible
-        
-        /// <summary>Modem control</summary>
-        const int REG_MCR = 4; 
-        /// <summary>Line status</summary>
-        const int REG_LSR = 5; 
-            //0	Data available
-            //1	Overrun error
-            //2	Parity error
-            //3	Framing error
-            //4	Break signal received
-            //5	THR is empty
-            //6	THR is empty, and line is idle
-            //7	Errornous data in FIFO
-        
-        /// <summary>Modem status</summary>
-        const int REG_MSR = 6;
-        /// <summary>Scratch</summary>
-        const int REG_SCR = 7; 
+        public void Writ_LineControl( UART oUart, byte bValue ) {
+            oUart._iDLAB = (0b10000000 & bValue ) > 0 ? 1 : 0;
 
-        const int UART0_PORT = 0xC0;
-        const int UART1_PORT = 0xD0;
+            bool fBreakSig = (0b01000000 & bValue) > 0;
 
-        readonly Dictionary<int, int>  _dctState = new Dictionary<int, int>();
-        readonly Dictionary<int, byte> _dctLineCtrl = new Dictionary<int, byte>();
+            oUart._bLineControl = bValue;
+        }
+
+        public byte Read_RX_Buffer( UART oUart ) {
+            if( oUart._iUart == 0 ) {
+                if( Console.KeyAvailable ) {
+                    ConsoleKeyInfo oKey = Console.ReadKey();
+                    return (byte)oKey.KeyChar;
+                }
+            }
+            return 0;
+        }
+
+        public void Writ_TX_Holding( UART oUart, byte bValue ) {
+            Console.Write( (char)bValue );
+        }
+
+            //int iStatus = ( bValue >> 1 & 0b00000111 );
+            //int iFifo   = ( bValue >> 6 & 0b00000011 );
+            //int iFifo64 = ( bValue >> 5 & 0b00000001 );
+            //int iIterup = ( bValue  & 0b00000001 );
+            //Bit	Value	Description	Reset by
+            //0	    xxxxxxx0	Interrupt pending	–
+            //	    xxxxxxx1	No interrupt pending	–
+            //3,2,1	xxxx000x	Modem status change	MSR read
+            //	    xxxx001x	Transmitter holding register empty	IIR read or THR write
+            //	    xxxx010x	Received data available	RBR read
+            //	    xxxx011x	Line status change	LSR read
+            //	    xxxx110x	Character timeout (16550)	RBR read
+            //4	    xxx0xxxx	Reserved	–
+            //5	    xx0xxxxx	Reserved (8250, 16450, 16550)	–
+            //	    xx1xxxxx	64 byte FIFO enabled (16750)	–
+            //7,6	00xxxxxx	No FIFO	–
+            //	    01xxxxxx	Unusable FIFO (16550 only)	–
+            //	    11xxxxxx	FIFO enabled	–
+        public byte Read_Interrupt_ID( UART oUart ) {
+            if( Console.KeyAvailable )
+                return 0b00000101;
+
+           return 0b00000011;
+        }
+
+            //Bit	Value	Description
+            //0	    xxxxxxx0	Disable FIFO’s
+            //	    xxxxxxx1	Enable FIFO’s
+            //1	    xxxxxx0x	–
+            //	    xxxxxx1x	Clear receive FIFO
+            //2	    xxxxx0xx	–
+            //	    xxxxx1xx	Clear transmit FIFO
+            //3	    xxxx0xxx	Select DMA mode 0
+            //	    xxxx1xxx	Select DMA mode 1
+            //4	    xxx0xxxx	Reserved
+            //5	    xx0xxxxx	Reserved (8250, 16450, 16550)
+            //	    xx1xxxxx	Enable 64 byte FIFO (16750)
+            //		Receive FIFO interrupt trigger level:
+            //7,6	00xxxxxx	1 byte
+            //	    01xxxxxx	4 bytes
+            //	    10xxxxxx	8 bytes
+            //	    11xxxxxx	14 bytes
+        public void Writ_FIFO_Control( UART oUart, byte bValue ) {
+            bool bFifoEna   = ( bValue & 0b00000001 ) > 0;
+            bool bClrRxFifo = ( bValue & 0b00000010 ) > 0;
+            bool bClrTxFifo = ( bValue & 0b00000100 ) > 0;
+            int  iDMAMode   = ( bValue & 0b00001000 ) > 0 ? 1 : 0;
+            bool bFifo64    = ( bValue & 0b00100000 ) > 0;
+            int  iTrigger   =   bValue >> 6;
+        }
+
+        public class UART {
+            public int  _iUart;
+            public byte _bLineControl = 0b00000010; 
+          //public byte _bLineStatus  = (int)LineStatus.THR_is_empty_and_line_is_idle;
+            public int  _iDLAB = 0;
+            public byte _bIIR;
+
+            public UART( int iPort) {
+                _iUart = iPort;
+            }
+
+            public override string ToString() {
+                return "Uart " + _iUart.ToString();
+            }
+        }
+
+        readonly Dictionary< int, UART > _dctUarts = new Dictionary<int, UART>();
 
         public SamplePorts() {
-            _dctState.Add( UART0_PORT, 0 );
-            _dctState.Add( UART1_PORT, 0 );
+            for( int iDLAB = 0; iDLAB < 2; iDLAB++ ) {
+                for( int j=0; j<8; j++ ) {
+                    _rgReadMatrix[iDLAB,j] = EmptyReadMethod;
+                    _rgWritMatrix[iDLAB,j] = EmptyWriteMethod;
+                }
+            }
+
+            for( int iDLAB =0; iDLAB<2; iDLAB++ ) {
+                _rgWritMatrix[iDLAB,3] = Writ_LineControl;
+                _rgReadMatrix[iDLAB,3] = Read_LineControl;
+
+                _rgReadMatrix[iDLAB,5] = Read_LineStatus;
+
+                _rgReadMatrix[iDLAB,2] = Read_Interrupt_ID;
+                _rgWritMatrix[iDLAB,2] = Writ_FIFO_Control;
+            }
+
+            _rgWritMatrix[0, 0] = Writ_TX_Holding;
+            _rgReadMatrix[0, 0] = Read_RX_Buffer;
         }
+
+        protected int DLAB( int iPortAddr ) {
+            int iDLAB = 0;
+            int iUart = iPortAddr / 8;
+
+            if( _dctUarts.ContainsKey( iUart ) )
+                iDLAB = _dctUarts[iUart]._iDLAB;
+
+            return iDLAB;
+        }
+
+        protected UART FindUart( int iPortAddr ) {
+            int iUart = iPortAddr / 8;
+
+            if( _dctUarts.ContainsKey( iUart ) )
+                return _dctUarts[iUart];
+
+            UART oUart = new UART( iUart );
+            _dctUarts.Add( iUart, oUart );
+
+            return oUart;
+        }
+
 
         public byte ReadPort(ushort sPortAddr)
         {
             //Console.WriteLine($"IN 0x{port:X4}");
 
-            int iOffset = sPortAddr & 0xff;
-            int iPort   = sPortAddr >> 8;
+            int iPort = sPortAddr % 8;
 
-            switch( iOffset ) {
-                case REG_THR: 
-                    if( iPort == UART0_PORT ) {
-                        if( Console.KeyAvailable ) {
-                            _dctState[iPort] = 1;
-                            return UART_LSR_RDY;
-                        }
-                    }
-                    break;
-                case REG_DLH:
-                    break;
-                case REG_FCT: /* REG_IIR & REG_FCT */
-                    break;
-                case REG_LCR: 
-                    // return 0b0000011; // 8 data bits, 1 stop bit, no parity
-                    // return _dctLineCtrl[iPort];
-                    return 1;
-                case REG_LSR:
-                    if( _dctState[iPort] == 1 ) {
-                        if( iPort == UART0_PORT ) {
-                            ConsoleKeyInfo oKey = Console.ReadKey();
-                            _dctState[iPort] = 0;
-                            return (byte)oKey.KeyChar;
-                        }
-                    }
-                    break;
-            }
-
-
-            return 0;
+            return _rgReadMatrix[DLAB(sPortAddr), iPort]( FindUart( sPortAddr ) );
         }
         public void WritePort(ushort sPortAddr, byte value)
         {
+            int iPort = sPortAddr % 8;
+
             //Console.WriteLine($"OUT 0x{port:X4}, 0x{value:X2}");
-            Console.Write( (char)value );
+            //Console.Write( (char)value );
 
-            int iOffset = sPortAddr & 0xff;
-            int iPort   = sPortAddr >> 8;
-
-            switch( iOffset ) {
-                case REG_THR: 
-                    Console.Write((char)value );
-                    break;
-                case REG_DLH:
-                    break;
-                case REG_FCT: /* REG_IIR & REG_FCT */
-                    break;
-                case REG_LCR: 
-                    if( !_dctLineCtrl.ContainsKey( iPort ) )
-                        _dctLineCtrl.Add( iPort, value );
-                    break;
-                case REG_LSR:
-                    break;
-            }
-
+            _rgWritMatrix[DLAB(sPortAddr), iPort]( FindUart( sPortAddr ), value );
         }
         public bool NMI => false;
         public bool MI => false;
