@@ -51,6 +51,9 @@
     <Compile Include="Z80.cs" />
     <Compile Include="Z80Asm.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="tinybasic2dms.bin" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

@@ -361,7 +361,7 @@ namespace z80Sample
 
         protected int DLAB( int iPortAddr ) {
             int iDLAB = 0;
-            int iUart = iPortAddr / 8;
+            int iUart = (iPortAddr & 0xff) / 8;
 
             if( _dctUarts.ContainsKey( iUart ) )
                 iDLAB = _dctUarts[iUart]._iDLAB;
@@ -370,7 +370,7 @@ namespace z80Sample
         }
 
         protected UART FindUart( int iPortAddr ) {
-            int iUart = iPortAddr / 8;
+            int iUart = (iPortAddr & 0xff) / 8;
 
             if( _dctUarts.ContainsKey( iUart ) )
                 return _dctUarts[iUart];
