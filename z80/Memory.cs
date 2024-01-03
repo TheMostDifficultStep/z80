@@ -5,10 +5,10 @@ using System.Collections.Generic;
 namespace z80
 {
     /// <summary>
-    /// This object looks odd since if we have a _ramStart why not
-    /// allocate less ram and then add that offset on each access?
-    /// Need to look at that. I'm keeping this since we can also
-    /// set memory break points with an object like this.
+    /// Gated memory access object. The memory space for the program
+    /// is considered ROM. Everything above the ramStart is RAM.
+    /// Technically you could debug your program and then just replace
+    /// this object with a normal byte array. :-/
     /// </summary>
     public class Z80Memory :
         IReadOnlyCollection<byte>,
@@ -17,6 +17,8 @@ namespace z80
         private readonly byte[] _memory;
         private readonly ushort _ramStart;
 
+        /// <param name="memory">The memory block for us to use.</param>
+        /// <param name="ramStart">Where in this memory block it's ok to write.</param>
         public Z80Memory(byte[] memory, ushort ramStart)
         {
             _memory   = memory;
