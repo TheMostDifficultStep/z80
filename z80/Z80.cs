@@ -57,13 +57,14 @@ namespace z80
             Reset();
         }
 
-        private ushort Hl => (ushort)(registers[L] + (registers[H] << 8));
-        private ushort Sp => (ushort)(registers[SP + 1] + (registers[SP] << 8));
-        private ushort Ix => (ushort)(registers[IX + 1] + (registers[IX] << 8));
-        private ushort Iy => (ushort)(registers[IY + 1] + (registers[IY] << 8));
-        private ushort Bc => (ushort)((registers[B] << 8) + registers[C]);
-        private ushort De => (ushort)((registers[D] << 8) + registers[E]);
-        private ushort Pc => (ushort)(registers[PC + 1] + (registers[PC] << 8));
+        public ushort Hl => (ushort)(registers[L] + (registers[H] << 8));
+        public ushort Sp => (ushort)(registers[SP + 1] + (registers[SP] << 8));
+        public ushort Ix => (ushort)(registers[IX + 1] + (registers[IX] << 8));
+        public ushort Iy => (ushort)(registers[IY + 1] + (registers[IY] << 8));
+        public ushort Bc => (ushort)((registers[B] << 8) + registers[C]);
+        public ushort De => (ushort)((registers[D] << 8) + registers[E]);
+        public ushort Pc => (ushort)(registers[PC + 1] + (registers[PC] << 8));
+        public byte   Ac => registers[A];
         public bool Halt { get; private set; }
 
         void InterruptMode0() {
@@ -3643,11 +3644,11 @@ namespace z80
 
         [Conditional("DEBUG")]private static void Log(string text)
         {
-            Console.CursorLeft = 20;
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine(text);
-            Console.ForegroundColor = ConsoleColor.White;
-            iOutputCount = 0;
+            //Console.CursorLeft = 20;
+            //Console.ForegroundColor = ConsoleColor.Cyan;
+            //Console.WriteLine(text);
+            //Console.ForegroundColor = ConsoleColor.White;
+            //iOutputCount = 0;
         }
 
         private static string RName(byte n)

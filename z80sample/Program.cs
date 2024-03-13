@@ -84,7 +84,7 @@ namespace z80Sample
             //    ram[iCount++] = b; 
             //}  
 
-            var myZ80 = new Z80(new Memory(ram, iCount), new SamplePorts());
+            var myZ80 = new Z80(new Z80Memory(ram, iCount), new SamplePorts());
             Console.Clear();
             //var counter = 0;
             while (!myZ80.Halt)
