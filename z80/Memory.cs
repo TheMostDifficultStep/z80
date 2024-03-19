@@ -69,12 +69,19 @@ namespace z80
         /// out of the stack and data area. O.o Kewl!
         /// </summary>
         /// <exception cref="ArgumentOutOfRangeException" />
+        /// <remarks>So as I debug tiny-basic I find I'm walking off
+        /// the end of memory A LOT. So for now at least, let's check
+        /// the memory access. In the future. We'll send a message
+        /// back up so the debugger can stop!!</remarks>
         public byte this[int iAddress] {
             get {
                 try {
-                    return _memory[iAddress];
+                    if( iAddress < _memory.Length )
+                        return _memory[iAddress];
+
+                    return 0;
                 } catch( IndexOutOfRangeException ) {
-                    return 0x76; // Halt
+                    return 0x00;
                 }
             }
             // Set isn't part of the r/o List interface. :-/
