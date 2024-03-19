@@ -3331,12 +3331,17 @@ namespace z80
             registers[F] = f;
         }
 
+        /// <summary>
+        /// if the unsigned value of A is less than the unsigned
+        /// value of B then Carry is set.
+        /// </summary>
         private void Sub(byte b)
         {
             var a = registers[A];
             var diff = a - b;
             registers[A] = (byte)diff;
             var f = (byte)(registers[F] & 0x28);
+
             if ((diff & 0x80) > 0)
                 f |= (byte)Fl.S;
             if (diff == 0)
@@ -3345,9 +3350,12 @@ namespace z80
                 f |= (byte)Fl.H;
             if ((a >= 0x80 && b >= 0x80 && (sbyte)diff > 0) || (a < 0x80 && b < 0x80 && (sbyte)diff < 0))
                 f |= (byte)Fl.PV;
+
             f |= (byte)Fl.N;
+
             if (diff < 0)
                 f |= (byte)Fl.C;
+
             registers[F] = f;
         }
 
@@ -3358,13 +3366,20 @@ namespace z80
             var diff = a - b - c;
             registers[A] = (byte)diff;
             var f = (byte)(registers[F] & 0x28);
-            if ((diff & 0x80) > 0) f |= (byte)Fl.S;
-            if (diff == 0) f |= (byte)Fl.Z;
-            if ((a & 0xF) < (b & 0xF) + c) f |= (byte)Fl.H;
-            if ((a >= 0x80 && b >= 0x80 && (sbyte)diff > 0) || (a < 0x80 && b < 0x80 && (sbyte)diff < 0))
+            if ((diff & 0x80) > 0) 
+                f |= (byte)Fl.S;
+            if (diff == 0) 
+                f |= (byte)Fl.Z;
+            if ((a & 0xF) < (b & 0xF) + c) 
+                f |= (byte)Fl.H;
+            if ((a >= 0x80 && b >= 0x80 && (sbyte)diff > 0) || 
+                (a <  0x80 && b <  0x80 && (sbyte)diff < 0) )
                 f |= (byte)Fl.PV;
             f |= (byte)Fl.N;
-            if (diff > 0xFF) f |= (byte)Fl.C;
+
+            if (diff < 0 )  // was diff > 0xFF
+                f |= (byte)Fl.C;
+
             registers[F] = f;
         }
 
@@ -3413,20 +3428,24 @@ namespace z80
 
         private void Cmp(byte b)
         {
-            var a = registers[A];
-            var diff = a - b;
-            var f = (byte)(registers[F] & 0x28);
+            var a    = registers[A];
+            int diff = a - b;
+            var f    = (byte)(registers[F] & 0x28);
+
             if ((diff & 0x80) > 0)
-                f = (byte)(f | 0x80);
+                f = (byte)(f | 0x80); // S
             if (diff == 0)
-                f = (byte)(f | 0x40);
+                f = (byte)(f | 0x40); // Z
             if ((a & 0xF) < (b & 0xF))
-                f = (byte)(f | 0x10);
-            if ((a > 0x80 && b > 0x80 && (sbyte)diff > 0) || (a < 0x80 && b < 0x80 && (sbyte)diff < 0))
-                f = (byte)(f | 0x04);
-            f = (byte)(f | 0x02);
-            if (diff > 0xFF)
-                f = (byte)(f | 0x01);
+                f = (byte)(f | 0x10); // H
+            if ((a > 0x80 && b > 0x80 && (sbyte)diff > 0) || 
+                (a < 0x80 && b < 0x80 && (sbyte)diff < 0)    )
+                f = (byte)(f | 0x04); // P/V
+
+            f = (byte)(f | 0x02);     // N
+
+            if (diff < 0)             // was diff > 0xFF
+                f = (byte)(f | 0x01); // CF
             registers[F] = f;
         }
 
