@@ -3622,15 +3622,15 @@ namespace z80
         [Flags]
         public enum Fl : byte
         {
-            C = 0x01,
-            N = 0x02,
+            C  = 0x01,
+            N  = 0x02,
             PV = 0x04,
-            H = 0x10,
-            Z = 0x40,
-            S = 0x80,
+            H  = 0x10,
+            Z  = 0x40,
+            S  = 0x80,
 
             None = 0x00,
-            All = 0xD7
+            All  = 0xD7
         }
 
 #if (DEBUG)
