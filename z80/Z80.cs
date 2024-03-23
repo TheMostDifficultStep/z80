@@ -65,7 +65,7 @@ namespace z80
         public ushort De => (ushort)((registers[D] << 8) + registers[E]);
         public ushort Pc => (ushort)(registers[PC + 1] + (registers[PC] << 8));
         public byte   Ac => registers[A];
-        public byte   Flags  => registers[F];
+        public byte   Flags  => registers[F]; // change to public
         public bool Halt { get; private set; }
 
         void InterruptMode0() {
