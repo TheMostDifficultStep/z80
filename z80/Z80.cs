@@ -3659,7 +3659,7 @@ namespace z80
             //    Console.Write($"{val:X2} ");
             //}
             //Console.ForegroundColor = ConsoleColor.White;
-            //iOutputCount += 1;
+            iOutputCount += 1;
         }
 
         [Conditional("DEBUG")]private static void Log(string text)
@@ -3668,7 +3668,7 @@ namespace z80
             //Console.ForegroundColor = ConsoleColor.Cyan;
             //Console.WriteLine(text);
             //Console.ForegroundColor = ConsoleColor.White;
-            //iOutputCount = 0;
+            iOutputCount = 0;
         }
 
         private static string RName(byte n)
