@@ -63,7 +63,12 @@ namespace z80
         public ushort Iy => (ushort)(registers[IY + 1] + (registers[IY] << 8));
         public ushort Bc => (ushort)((registers[B] << 8) + registers[C]);
         public ushort De => (ushort)((registers[D] << 8) + registers[E]);
-        public ushort Pc => (ushort)(registers[PC + 1] + (registers[PC] << 8));
+        public ushort Pc {
+            get { return (ushort)(registers[PC + 1] + (registers[PC] << 8)); }
+            set { registers[PC    ] = (byte)(value >> 8);
+                  registers[PC + 1] = (byte)(value & 0XFF);
+            }
+        }
         public byte   Ac => registers[A];
         public byte   Flags  => registers[F]; // change to public
         public bool Halt { get; private set; }
@@ -159,6 +164,43 @@ namespace z80
             Log($"LD {(useHL1 ? "(HL)" : RName(r))}, {(useHL2 ? "(HL)" : RName(lo))}");
 #endif
             return;
+        }
+
+        private void HandleBdosCall()
+        {
+            // C register contains the CP/M function code
+            byte bBdosCode = C; 
+
+            switch( bBdosCode ) {
+                case 2: 
+                    // Output single character from E register
+                    //Console.Write((char)E);
+                    ports.WritePort( 0x02, E );
+                    break;
+                case 9:
+                    // Output '$' terminated string starting at DE
+                    ushort address = De;
+                    for( int i=0; i<100; ++i ) {
+                        byte bChar = mem[address++];
+                        if (bChar == '$')
+                            break;
+
+                        //Console.Write(current);
+                        ports.WritePort( 0x02, bChar );
+                    }
+                    break;
+            }
+
+            // Simulate a Z80 'RET' instruction to return back to Zexdoc
+            //ushort retAddress = PopWordFromStack();
+            //PC = retAddress;
+
+            // POP PC
+            var addr = Sp;
+            registers[PC + 1] = mem[addr++];
+            registers[PC    ] = mem[addr++];
+            registers[SP + 1] = (byte)(addr & 0xFF);
+            registers[SP    ] = (byte)(addr >> 8);
         }
 
         public void Parse()
@@ -3527,15 +3569,21 @@ namespace z80
         /// <returns></returns>
         private byte Fetch()
         {
-            var pc = Pc;
-            var ret = mem[pc];
+            if( Pc == 0x05 ) {
+                HandleBdosCall();
+            }
+
+            //var pc     = Pc;
+            var bInstr = mem[Pc];
+
 #if (DEBUG)
-            LogMemRead(pc, ret);
+            LogMemRead(Pc, bInstr);
 #endif
-            pc++;
-            registers[PC] = (byte)(pc >> 8);
-            registers[PC + 1] = (byte)(pc & 0xFF);
-            return ret;
+            Pc++; // pc++;
+            //registers[PC    ] = (byte)(pc >> 8);
+            //registers[PC + 1] = (byte)(pc & 0xFF);
+
+            return bInstr;
         }
 
         private ushort Fetch16()

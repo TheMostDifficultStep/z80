@@ -42,22 +42,32 @@ namespace z80
             _memory   = memory;
             _ramStart = usProgEnd;
 
-            // Generated from CPMfake.asm...
+            // Generated from CPMfake.asm... faking that no key
+            // was entered. This is mainly for dazzle.
+            //if( fComFile ) {
+            //    _memory[0 ] = 0xc3; // Jp to 0x100
+            //    _memory[1 ] = 0x00;
+            //    _memory[2 ] = 0x01;
+            //    _memory[3 ] = 0x00;
+            //    _memory[4 ] = 0x00;
+            //    _memory[5 ] = 0x3e; // ld a, 0x11
+            //    _memory[6 ] = 0x11;
+            //    _memory[7 ] = 0xb9; // cp c
+            //    _memory[8 ] = 0x28; // jr z, 1
+            //    _memory[9 ] = 0x01;
+            //    _memory[10] = 0xc9; // return
+            //    _memory[10] = 0xdb; // in a, (0x02) ... was ld a, 0x0 (comstat)
+            //    _memory[11] = 0x02;
+            //    _memory[12] = 0xc9; // return
+            //}
             if( fComFile ) {
-                _memory[0] = 0xc3; // Jp to 0x100
-                _memory[1] = 0x00;
-                _memory[2] = 0x01;
-                _memory[3] = 0x00;
-                _memory[4] = 0x00;
-                _memory[5] = 0x3e; // ld a, 0x11
-                _memory[6] = 0x11; 
-                _memory[7] = 0xb9; // cp c
-                _memory[8] = 0x28; // jr z, 1
-                _memory[9] = 0x01; 
-                _memory[10] = 0xc9; // return
-                _memory[10] = 0xdb; // in a, (0x02) ... was ld a, 0x0 (comstat)
-                _memory[11] = 0x02;
-                _memory[12] = 0xc9; // return
+                // 1. Point location 0006h to top of safe memory (e.g., F005h)
+                _memory[0x0005] = 0xC3; // Z80 'JP' opcode
+                _memory[0x0006] = 0x05; // Low  byte of BDOS handler address
+                _memory[0x0007] = 0xF0; // High byte of BDOS handler address
+
+                // 2. Map address 0000h to trap program exit
+                _memory[0x0000] = 0x76; // Z80 'HALT' opcode (easiest way to break the loop)            }
             }
         }
 
@@ -90,11 +100,16 @@ namespace z80
                 if (iAddress >= _ramStart)
                     _memory[iAddress] = value;
                 else {
+                    // zexdoc MIGHT be self modifying and setting values
+                    // within it's program space. I'm not an assembly guy
+                    // but perhaps these are global varables? So comment
+                    // out this guard...
+
                     // Second, allow it a little bit into my CP/M low area.
-                    if( iAddress > 0x5 && iAddress < 0x100 )
+                    //if( iAddress > 0x5 && iAddress < 0x100 )
                         _memory[iAddress] = value;
-                    else
-                        throw new IndexOutOfRangeException();
+                    //else
+                    //    throw new IndexOutOfRangeException();
                 }
             }
         }
