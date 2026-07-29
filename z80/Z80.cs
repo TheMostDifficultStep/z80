@@ -1125,6 +1125,10 @@ namespace z80
                         var a = registers[A];
                         var c = (byte)((a & 0x80) >> 7);
                         a <<= 1;
+                        // Wrap around if bit 7 is 1
+                        if( a == 0 && c > 0 )
+                            a = 1;
+
                         registers[A] = a;
                         registers[F] &= (byte)~(Fl.H | Fl.N | Fl.C);
                         registers[F] |= c;
@@ -1156,6 +1160,10 @@ namespace z80
                         var a = registers[A];
                         var c = (byte)(a & 0x01);
                         a >>= 1;
+                        // Wrap around if bit 0 is 1
+                        if( a == 0 && c > 0 )
+                            a &= 0x80;
+
                         registers[A] = a;
                         registers[F] &= (byte)~(Fl.H | Fl.N | Fl.C);
                         registers[F] |= c;
@@ -3599,8 +3607,8 @@ namespace z80
         {
             Array.Clear(registers, 0, registers.Length);
 
-            registers[A] = 0xFF;
-            registers[F] = 0xFF;
+            registers[A ] = 0xFF;
+            registers[F ] = 0xFF;
             registers[SP] = 0xFF;
             registers[SP + 1] = 0xFF;
 
@@ -3609,6 +3617,7 @@ namespace z80
             IFF2 = false;
 
             _clock = DateTime.UtcNow;
+            Halt = false;
         }
 
         public byte[] GetState()
