@@ -169,13 +169,13 @@ namespace z80
         private void HandleBdosCall()
         {
             // C register contains the CP/M function code
-            byte bBdosCode = C; 
+            byte bBdosCode = registers[C]; 
 
             switch( bBdosCode ) {
                 case 2: 
                     // Output single character from E register
                     //Console.Write((char)E);
-                    ports.WritePort( 0x02, E );
+                    ports.WritePort( 0x02, registers[E] );
                     break;
                 case 9:
                     // Output '$' terminated string starting at DE
@@ -3571,6 +3571,10 @@ namespace z80
         {
             if( Pc == 0x05 ) {
                 HandleBdosCall();
+                if( Pc == 0x05 ) {
+                    throw new InvalidOperationException( "return from bdos is bdos call" );
+                }
+                return Fetch();
             }
 
             //var pc     = Pc;
