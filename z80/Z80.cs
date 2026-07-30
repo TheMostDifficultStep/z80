@@ -2626,6 +2626,9 @@ namespace z80
                         }
                         return;
                     }
+                default:
+                    Wait( 8 ); // 4 for the ED and 4 for the hole.
+                    return;
             }
 #if (DEBUG)
             Log($"ED {mc:X2}: {r:X2}");
