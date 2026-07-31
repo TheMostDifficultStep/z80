@@ -1969,11 +1969,12 @@ namespace z80
                         registers[F] = (byte)(registers[F] & 0xE9);
                         if (bc != 0)
                         {
-                            var pc = (ushort)((registers[PC] << 8) + registers[PC + 1]);
-                            // jumps back to itself
-                            pc -= 2;
-                            registers[PC] = (byte)(pc >> 8);
-                            registers[PC + 1] = (byte)(pc & 0xFF);
+                            //var pc = (ushort)((registers[PC] << 8) + registers[PC + 1]);
+                            //// jumps back to itself
+                            //pc -= 2;
+                            //registers[PC] = (byte)(pc >> 8);
+                            //registers[PC + 1] = (byte)(pc & 0xFF);
+                            Pc-=2;
                             Wait(21);
                             return;
                         }
