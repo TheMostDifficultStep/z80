@@ -174,7 +174,6 @@ namespace z80
             switch( bBdosCode ) {
                 case 2: 
                     // Output single character from E register
-                    //Console.Write((char)E);
                     ports.WritePort( 0x02, registers[E] );
                     break;
                 case 9:
@@ -185,9 +184,13 @@ namespace z80
                         if (bChar == '$')
                             break;
 
-                        //Console.Write(current);
                         ports.WritePort( 0x02, bChar );
                     }
+                    break;
+                case 0x0b:
+                    // 0XFF or 0x01 if key is ready.
+                    registers[A] = 0;
+                    registers[L] = 0;
                     break;
             }
 

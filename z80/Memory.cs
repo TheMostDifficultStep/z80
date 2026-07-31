@@ -94,23 +94,20 @@ namespace z80
                     return 0x00;
                 }
             }
-            // Set isn't part of the r/o List interface. :-/
             set {
-                // First keep the program out of it's own memory.
-                if (iAddress >= _ramStart)
-                    _memory[iAddress] = value;
-                else {
-                    // zexdoc MIGHT be self modifying and setting values
-                    // within it's program space. I'm not an assembly guy
-                    // but perhaps these are global varables? So comment
-                    // out this guard...
+                // So I wrote this with the intent to keep the
+                // program out of it's own memory. Then I find
+                // Zexdoc/Zexall are self modifying. 
 
+                //if (iAddress >= _ramStart)
+                    _memory[iAddress] = value;
+                //else {
                     // Second, allow it a little bit into my CP/M low area.
                     //if( iAddress > 0x5 && iAddress < 0x100 )
-                        _memory[iAddress] = value;
+                    //  _memory[iAddress] = value;
                     //else
                     //    throw new IndexOutOfRangeException();
-                }
+                //}
             }
         }
 
