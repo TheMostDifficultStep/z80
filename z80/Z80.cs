@@ -2984,7 +2984,9 @@ namespace z80
                         Wait(8);
                         return;
                     }
-
+                default:
+                    Wait(8); // holes for DD
+                    return;
             }
 #if (DEBUG)
             Log($"DD {mc:X2}: {hi:X} {mid:X} {lo:X}");
@@ -3337,7 +3339,9 @@ namespace z80
                         Wait(8);
                         return;
                     }
-
+                default:
+                    Wait(8); // holes for FD
+                    return;
             }
 #if (DEBUG)
             Log($"FD {mc:X2}: {hi:X2} {lo:X2} {r:X2}");
