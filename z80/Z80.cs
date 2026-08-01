@@ -1126,11 +1126,11 @@ namespace z80
                 case 0x07:
                     {
                         var a = registers[A];
-                        var c = (byte)((a & 0x80) >> 7);
+                        var c = (byte)((a & 0x80) >> 7); // a[7] -> c[0]
                         a <<= 1;
-                        // Wrap around if bit 7 is 1
-                        if( a == 0 && c > 0 )
-                            a = 1;
+                        
+                        if( c > 0 )
+                            a |= 0x01; // Wrap around if bit 7 was 1
 
                         registers[A] = a;
                         registers[F] &= (byte)~(Fl.H | Fl.N | Fl.C);
@@ -1146,11 +1146,12 @@ namespace z80
                         var a = registers[A];
                         var c = (byte)((a & 0x80) >> 7);
                         a <<= 1;
+
                         var f = registers[F];
-                        a |= (byte)(f & (byte)Fl.C);
+                        a |= (byte)(f & (byte)Fl.C); // a[0] := C
                         registers[A] = a;
                         f &= (byte)~(Fl.H | Fl.N | Fl.C);
-                        f |= c;
+                        f |= c; // Carry bit gets the old a[7]
                         registers[F] = f;
 #if (DEBUG)
                         Log("RLA");
@@ -1160,16 +1161,17 @@ namespace z80
                     }
                 case 0x0F:
                     {
-                        var a = registers[A];
-                        var c = (byte)(a & 0x01);
+                        var a  = registers[A];
+                        var a1 = (byte)(a & 0x01);
+
                         a >>= 1;
-                        // Wrap around if bit 0 is 1
-                        if( a == 0 && c > 0 )
-                            a &= 0x80;
+                        
+                        if( a1 > 0 )
+                            a |= 0x80;  // Wrap around if bit 0 is 1
 
                         registers[A] = a;
-                        registers[F] &= (byte)~(Fl.H | Fl.N | Fl.C);
-                        registers[F] |= c;
+                        registers[F] &= (byte)~(Fl.H | Fl.N | Fl.C); // Clears carry.
+                        registers[F] |= a1;                          // sets carry to what a[0] was before move.
 #if (DEBUG)
                         Log("RRCA");
 #endif
@@ -1182,10 +1184,10 @@ namespace z80
                         var c = (byte)(a & 0x01);
                         a >>= 1;
                         var f = registers[F];
-                        a |= (byte)((f & (byte)Fl.C) << 7);
+                        a |= (byte)((f & (byte)Fl.C) << 7); // a[7] := C
                         registers[A] = a;
                         f &= (byte)~(Fl.H | Fl.N | Fl.C);
-                        f |= c;
+                        f |= c; // Carry bit gets the old a[0]
                         registers[F] = f;
 #if (DEBUG)
                         Log("RRA");
