@@ -37,7 +37,7 @@ namespace z80
         private bool IFF2;
         private int interruptMode;
 
-        private readonly IPorts       ports;
+        public IPorts                 Ports { get; set; }
         private readonly List<Action> _rgIntrMode = new List<Action>(3);
 
         /// <remarks>
@@ -48,7 +48,7 @@ namespace z80
         public Z80( Z80Memory oMemory, IPorts oPorts)
         {
             mem   = oMemory ?? throw new ArgumentNullException(nameof(oMemory));
-            ports = oPorts  ?? throw new ArgumentNullException(nameof(oPorts ));
+            Ports = oPorts  ?? throw new ArgumentNullException(nameof(oPorts ));
 
             _rgIntrMode.Add( InterruptMode0 );
             _rgIntrMode.Add( InterruptMode1 );
@@ -76,7 +76,7 @@ namespace z80
         void InterruptMode0() {
             // This is not quite correct, as it only runs a RST xx
             // Instead, it should also support any other instruction
-            var instruction = ports.Data;
+            var instruction = Ports.Data;
             var stack = Sp;
             mem[--stack] = (byte)(Pc >> 8);
             mem[--stack] = (byte)(Pc);
@@ -107,7 +107,7 @@ namespace z80
         }
 
         void InterruptMode2() {
-            var vector = ports.Data;
+            var vector = Ports.Data;
             var stack = Sp;
             mem[--stack] = (byte)(Pc >> 8);
             mem[--stack] = (byte)(Pc);
@@ -174,7 +174,7 @@ namespace z80
             switch( bBdosCode ) {
                 case 2: 
                     // Output single character from E register
-                    ports.WritePort( 0x02, registers[E] );
+                    Ports.WritePort( 0x02, registers[E] );
                     break;
                 case 9:
                     // Output '$' terminated string starting at DE
@@ -184,7 +184,7 @@ namespace z80
                         if (bChar == '$')
                             break;
 
-                        ports.WritePort( 0x02, bChar );
+                        Ports.WritePort( 0x02, bChar );
                     }
                     break;
                 case 0x0b:
@@ -208,11 +208,11 @@ namespace z80
 
         public void Parse()
         {
-            if (ports.NMI) {
+            if (Ports.NMI) {
                 NonMaskableInt();
                 return;
             }
-            if (IFF1 && ports.MI) {
+            if (IFF1 && Ports.MI) {
                 IFF1 = false;
                 IFF2 = false;
 
@@ -1411,7 +1411,7 @@ namespace z80
                 case 0xDB:
                     {
                         var port = Fetch() + (registers[A] << 8);
-                        registers[A] = ports.ReadPort((ushort)port);
+                        registers[A] = Ports.ReadPort((ushort)port);
 #if (DEBUG)
                         Log($"IN A, (0x{port:X2})");
 #endif
@@ -1421,7 +1421,7 @@ namespace z80
                 case 0xD3:
                     {
                         var port = Fetch() + (registers[A] << 8);
-                        ports.WritePort((ushort)port, registers[A]);
+                        Ports.WritePort((ushort)port, registers[A]);
 #if (DEBUG)
                         Log($"OUT (0x{port:X2}), A");
 #endif
@@ -2404,7 +2404,7 @@ namespace z80
                 case 0x68:
                 case 0x78:
                     {
-                        var a = (byte)ports.ReadPort(Bc);
+                        var a = (byte)Ports.ReadPort(Bc);
                         registers[r] = a;
                         var f = (byte)(registers[F] & 0x29);
                         if ((a & 0x80) > 0) f |= (byte)Fl.S;
@@ -2419,7 +2419,7 @@ namespace z80
                     }
                 case 0xA2:
                     {
-                        var a = (byte)ports.ReadPort(Bc);
+                        var a = (byte)Ports.ReadPort(Bc);
                         var hl = Hl;
                         mem[hl++] = a;
                         registers[H] = (byte)(hl >> 8);
@@ -2439,7 +2439,7 @@ namespace z80
                     }
                 case 0xB2:
                     {
-                        var a = (byte)ports.ReadPort(Bc);
+                        var a = (byte)Ports.ReadPort(Bc);
                         var hl = Hl;
                         mem[hl++] = a;
                         registers[H] = (byte)(hl >> 8);
@@ -2468,7 +2468,7 @@ namespace z80
                     }
                 case 0xAA:
                     {
-                        var a = (byte)ports.ReadPort(Bc);
+                        var a = (byte)Ports.ReadPort(Bc);
                         var hl = Hl;
                         mem[hl--] = a;
                         registers[H] = (byte)(hl >> 8);
@@ -2487,7 +2487,7 @@ namespace z80
                     }
                 case 0xBA:
                     {
-                        var a = (byte)ports.ReadPort(Bc);
+                        var a = (byte)Ports.ReadPort(Bc);
                         var hl = Hl;
                         mem[hl--] = a;
                         registers[H] = (byte)(hl >> 8);
@@ -2523,7 +2523,7 @@ namespace z80
                 case 0x79:
                     {
                         var a = registers[r];
-                        ports.WritePort(Bc, a);
+                        Ports.WritePort(Bc, a);
                         var f = (byte)(registers[F] & 0x29);
                         if ((a & 0x80) > 0) f |= (byte)Fl.S;
                         if (a == 0) f |= (byte)Fl.Z;
@@ -2539,7 +2539,7 @@ namespace z80
                     {
                         var hl = Hl;
                         var a = mem[hl++];
-                        ports.WritePort(Bc, a);
+                        Ports.WritePort(Bc, a);
                         registers[H] = (byte)(hl >> 8);
                         registers[L] = (byte)hl;
                         var b = (byte)(registers[B] - 1);
@@ -2559,7 +2559,7 @@ namespace z80
                     {
                         var hl = Hl;
                         var a = mem[hl++];
-                        ports.WritePort(Bc, a);
+                        Ports.WritePort(Bc, a);
                         registers[H] = (byte)(hl >> 8);
                         registers[L] = (byte)hl;
                         var b = (byte)(registers[B] - 1);
@@ -2588,7 +2588,7 @@ namespace z80
                     {
                         var hl = Hl;
                         var a = mem[hl--];
-                        ports.WritePort(Bc, a);
+                        Ports.WritePort(Bc, a);
                         registers[H] = (byte)(hl >> 8);
                         registers[L] = (byte)hl;
                         var b = (byte)(registers[B] - 1);
@@ -2607,7 +2607,7 @@ namespace z80
                     {
                         var hl = Hl;
                         var a = mem[hl--];
-                        ports.WritePort(Bc, a);
+                        Ports.WritePort(Bc, a);
                         registers[H] = (byte)(hl >> 8);
                         registers[L] = (byte)hl;
                         var b = (byte)(registers[B] - 1);
