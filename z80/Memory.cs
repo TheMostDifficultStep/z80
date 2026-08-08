@@ -86,10 +86,7 @@ namespace z80
         public byte this[int iAddress] {
             get {
                 try {
-                    if( iAddress < _memory.Length )
-                        return _memory[iAddress];
-
-                    return 0;
+                    return _memory[iAddress];
                 } catch( IndexOutOfRangeException ) {
                     return 0x00;
                 }
@@ -99,15 +96,10 @@ namespace z80
                 // program out of it's own memory. Then I find
                 // Zexdoc/Zexall are self modifying. 
 
-                //if (iAddress >= _ramStart)
+                try {
                     _memory[iAddress] = value;
-                //else {
-                    // Second, allow it a little bit into my CP/M low area.
-                    //if( iAddress > 0x5 && iAddress < 0x100 )
-                    //  _memory[iAddress] = value;
-                    //else
-                    //    throw new IndexOutOfRangeException();
-                //}
+                } catch( IndexOutOfRangeException ) {
+                }
             }
         }
 
