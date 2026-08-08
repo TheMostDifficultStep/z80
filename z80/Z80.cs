@@ -180,17 +180,18 @@ namespace z80
                     // Output '$' terminated string starting at DE
                     ushort address = De;
                     for( int i=0; i<100; ++i ) {
-                        byte bChar = mem[address++];
-                        if (bChar == '$')
+                        byte bChar2 = mem[address++];
+                        if (bChar2 == '$')
                             break;
 
-                        Ports.WritePort( 0x02, bChar );
+                        Ports.WritePort( 0x02, bChar2 );
                     }
                     break;
                 case 0x0b:
                     // 0XFF or 0x01 if key is ready.
-                    registers[A] = 0;
-                    registers[L] = 0;
+                    byte bChar = Ports.ReadPort( 0x02 );
+                    registers[A] = bChar;
+                    registers[L] = bChar;
                     break;
             }
 
