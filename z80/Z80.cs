@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 
@@ -58,7 +59,12 @@ namespace z80
         }
 
         public ushort Hl => (ushort)(registers[L] + (registers[H] << 8));
-        public ushort Sp => (ushort)(registers[SP + 1] + (registers[SP] << 8));
+        public ushort Sp {
+            get { return (ushort)(registers[SP + 1] + (registers[SP] << 8)); }
+            set { registers[SP    ] = (byte)(value >> 8); // High
+                  registers[SP + 1] = (byte)(value);      // Lo
+            }
+        }
         public ushort Ix => (ushort)(registers[IX + 1] + (registers[IX] << 8));
         public ushort Iy => (ushort)(registers[IY + 1] + (registers[IY] << 8));
         public ushort Bc => (ushort)((registers[B] << 8) + registers[C]);
@@ -200,11 +206,10 @@ namespace z80
             //PC = retAddress;
 
             // POP PC
-            var addr = Sp;
-            registers[PC + 1] = mem[addr++];
-            registers[PC    ] = mem[addr++];
-            registers[SP + 1] = (byte)(addr & 0xFF);
-            registers[SP    ] = (byte)(addr >> 8);
+            var stack = Sp;
+            registers[PC + 1] = mem[stack++];
+            registers[PC    ] = mem[stack++];
+            Sp = stack;
         }
 
         public void Parse()
@@ -223,6 +228,14 @@ namespace z80
             }
             if (Halt) 
                 return;
+
+            if( Pc == 0x05 ) {
+                HandleBdosCall();
+                if( Pc == 0x05 ) {
+                    throw new InvalidOperationException( "return from bdos is bdos call" );
+                }
+                return;
+            }
 
             var mc = Fetch();
             var hi = (byte)(mc >> 6);
@@ -1350,9 +1363,8 @@ namespace z80
                     {
                         var stack = Sp;
                         registers[PC + 1] = mem[stack++];
-                        registers[PC] = mem[stack++];
-                        registers[SP] = (byte)(stack >> 8);
-                        registers[SP + 1] = (byte)(stack);
+                        registers[PC    ] = mem[stack++];
+                        Sp = stack;
 #if (DEBUG)
                         Log("RET");
 #endif
@@ -3591,14 +3603,6 @@ namespace z80
         /// <returns></returns>
         private byte Fetch()
         {
-            if( Pc == 0x05 ) {
-                HandleBdosCall();
-                if( Pc == 0x05 ) {
-                    throw new InvalidOperationException( "return from bdos is bdos call" );
-                }
-                return Fetch();
-            }
-
             //var pc     = Pc;
             var bInstr = mem[Pc];
 
