@@ -1433,6 +1433,10 @@ namespace z80
                     }
                 case 0xD3:
                     {
+                        // Weird hack where the A value is stuffed in the
+                        // high byte of the port address. This will be a
+                        // problem if I ever implement 16bit port address
+                        // space.
                         var port = Fetch() + (registers[A] << 8);
                         Ports.WritePort((ushort)port, registers[A]);
 #if (DEBUG)
