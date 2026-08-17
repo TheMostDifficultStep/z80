@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 
@@ -38,6 +37,34 @@ namespace z80
         private bool IFF2;
         private int interruptMode;
 
+        [Obsolete] [Flags]
+        public enum Fl : byte
+        {
+            C  = 0x01,
+            N  = 0x02,
+            PV = 0x04,
+            H  = 0x10,
+            Z  = 0x40,
+            S  = 0x80,
+        }
+
+        const byte Fl_S  = 0x80;
+        const byte Fl_Z  = 0X40;
+        const byte Fl_H  = 0X10;
+        const byte Fl_PV = 0x04;
+        const byte Fl_N  = 0x02;
+        const byte Fl_C  = 0x01;
+
+        /// <summary>
+        /// This function is probably best used by secifying a SINGLE
+        /// bit and not multible.
+        /// </summary>
+        /// <param name="bFlag">The bits we are interested in.</param>
+        /// <returns>true if any of the specified bit(s) are set.</returns>
+        public int GetFlag( byte bFlag ) {
+            return ( registers[F] & bFlag ) > 0 ? 0 : 1;
+        }
+
         public IPorts                 Ports { get; set; }
         private readonly List<Action> _rgIntrMode = new List<Action>(3);
 
@@ -75,8 +102,11 @@ namespace z80
                   registers[PC + 1] = (byte)(value & 0XFF);
             }
         }
-        public byte   Ac => registers[A];
-        public byte   Flags  => registers[F]; // change to public
+        public byte Ac {
+            get { return registers[A]; }
+            set { registers[A] = value; }
+        }
+        public byte Flags  => registers[F]; // change to public
         public bool Halt { get; private set; }
 
         void InterruptMode0() {
@@ -912,7 +942,7 @@ namespace z80
                 case 0x1C:
                 case 0x24:
                 case 0x2C:
-                case 0x3C:
+                case 0x3C: // inc a
                     {
                         // INC r
                         registers[r] = Inc(registers[r]);
@@ -929,7 +959,7 @@ namespace z80
 #if (DEBUG)
                         Log("INC (HL)");
 #endif
-                        Wait(7);
+                        Wait(11); 
                         return;
                     }
 
@@ -939,14 +969,14 @@ namespace z80
                 case 0x1D:
                 case 0x25:
                 case 0x2D:
-                case 0x3D:
+                case 0x3D: // DEC a
                     {
                         // DEC r
                         registers[r] = Dec(registers[r]);
 #if (DEBUG)
                         Log($"DEC {RName(r)}");
 #endif
-                        Wait(7);
+                        Wait(4);
                         return;
                     }
                 case 0x35:
@@ -956,7 +986,7 @@ namespace z80
 #if (DEBUG)
                         Log("DEC (HL)");
 #endif
-                        Wait(7);
+                        Wait(11);
                         return;
                     }
                 case 0x27:
@@ -1057,7 +1087,7 @@ namespace z80
 #if (DEBUG)
                         Log("INC BC");
 #endif
-                        Wait(4);
+                        Wait(6);
                         return;
                     }
                 case 0x13:
@@ -1090,7 +1120,7 @@ namespace z80
 #if (DEBUG)
                         Log("INC SP");
 #endif
-                        Wait(4);
+                        Wait(6);
                         return;
                     }
                 case 0x0B:
@@ -2982,7 +3012,7 @@ namespace z80
 #if (DEBUG)
                         Log("INC IX");
 #endif
-                        Wait(4);
+                        Wait(10); /* 4 */
                         return;
                     }
                 case 0x2B:
@@ -3337,7 +3367,7 @@ namespace z80
 #if (DEBUG)
                         Log("INC IY");
 #endif
-                        Wait(4);
+                        Wait(10);
                         return;
                     }
                 case 0x2B:
@@ -3529,38 +3559,61 @@ namespace z80
             registers[F] = f;
         }
 
+        /// <summary>
+        /// Good test numbers...
+        /// 0x02 -> 0x03 : S=0 Z=0 H=0 V=0 N=0
+        /// 0X0F -> 0X10 : S=0 Z=0 H=1 V=0 N=0
+        /// 0X7F -> 0X80 : S=1 Z=0 H=1 V=1 N=0
+        /// 0X80 -> 0X80 : S=1 Z=0 H=0 V=0 N=0
+        /// 0XFF -> 0X00 : S=0 Z=1 H=1 V=0 N=0
+        /// </summary>
         private byte Inc(byte b)
         {
             var sum = b + 1;
-            var f = (byte)(registers[F] & 0x28);
+            
+            //var f = (byte)(registers[F] & 0x28);
+            byte f = (byte)(registers[F] & ~( Fl_S | Fl_Z| Fl_H | Fl_N | Fl_PV ));
+
             if ((sum & 0x80) > 0)
-                f = (byte)(f | 0x80);
-            if (sum == 0)
-                f = (byte)(f | 0x40);
-            if ((b & 0xF) == 0xF)
-                f = (byte)(f | 0x10);
-            if ((b < 0x80 && (sbyte)sum < 0))
-                f = (byte)(f | 0x04);
-            f = (byte)(f | 0x02);
-            if (sum > 0xFF) f = (byte)(f | 0x01);
+                f = (byte)(f | Fl_S );
+            if ((sum & 0xff ) == 0) // ff + 1 -> 100, roll over to 0.
+                f = (byte)(f | Fl_Z );
+            if ((b & 0x0F) + 0x01 > 0x0F ) 
+                f = (byte)(f | Fl_H );
+            if (b == 0x7f ) 
+                f = (byte)(f | Fl_PV);
+
             registers[F] = f;
 
             return (byte)sum;
         }
 
+        /// <summary>
+        /// The lower nibble goes from 0 to F (0 - 1), which 
+        /// requires a borrow from bit 4 into bit 3.
+        /// </summary>
+        private bool IsHalfBorrow( byte bMinuend, byte bSubtrahend ) {
+            // ( bMinuend & 0x07 ) - (bSubtrahend & 0x07 )
+            return ( bMinuend & 0x0F ) - (bSubtrahend & 0x0F ) /* - GetFlag( Fl_C ) */ < 0;
+        }
+
         private byte Dec(byte b)
         {
             var sum = b - 1;
-            var f = (byte)(registers[F] & 0x28);
+            //var f = (byte)(registers[F] & 0x28);
+            byte f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV ));
+
             if ((sum & 0x80) > 0)
-                f = (byte)(f | 0x80);
-            if (sum == 0)
-                f = (byte)(f | 0x40);
-            if ((b & 0x0F) == 0)
-                f = (byte)(f | 0x10);
-            if (b == 0x80)
-                f = (byte)(f | 0x04);
-            f = (byte)(f | 0x02);
+                f = (byte)(f | Fl_S );
+            if ((sum & 0xff ) == 0)
+                f = (byte)(f | Fl_Z );
+            if (IsHalfBorrow( b, 0x01 ))
+                f = (byte)(f | Fl_H );
+            if (b == 0x80 ) 
+                f = (byte)(f | Fl_PV);
+
+            f = (byte)( f | Fl_N ); // sub instructions.
+
             registers[F] = f;
 
             return (byte)sum;
@@ -3702,19 +3755,7 @@ namespace z80
             registers[r2] = t;
         }
 
-        [Flags]
-        public enum Fl : byte
-        {
-            C  = 0x01,
-            N  = 0x02,
-            PV = 0x04,
-            H  = 0x10,
-            Z  = 0x40,
-            S  = 0x80,
 
-            None = 0x00,
-            All  = 0xD7
-        }
 
 #if (DEBUG)
         private static int iOutputCount = 0;
