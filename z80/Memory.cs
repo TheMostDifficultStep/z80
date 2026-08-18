@@ -68,7 +68,8 @@ namespace z80
 
                 // 2. Map address 0000h to trap program exit
                 _memory[0x0000] = 0x76; // Z80 'HALT' opcode (easiest way to break the loop)            }
-                _memory[0x0001] = 0X3D; // inc a -> 3C, dec a -> 3D
+                _memory[0x0001] = 0XDD; // inc a -> 3C, dec a -> 3D
+                _memory[0x0002] = 0x24; // inc ixh -> dd24, inc ixl -> dd2c
             }
         }
 

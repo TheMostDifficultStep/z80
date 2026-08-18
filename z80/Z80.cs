@@ -27,7 +27,9 @@ namespace z80
         private const byte I = 16;
         private const byte R = 17;
         private const byte IX = 18;
+        private const byte IXL = 19;
         private const byte IY = 20;
+        private const byte IYL = 21;
         private const byte SP = 22;
         private const byte PC = 24;
         private readonly Z80Memory mem;
@@ -92,8 +94,8 @@ namespace z80
                   registers[SP + 1] = (byte)(value);      // Lo
             }
         }
-        public ushort Ix => (ushort)(registers[IX + 1] + (registers[IX] << 8));
-        public ushort Iy => (ushort)(registers[IY + 1] + (registers[IY] << 8));
+        public ushort Ix => (ushort)(registers[IXL] + (registers[IX] << 8));
+        public ushort Iy => (ushort)(registers[IYL] + (registers[IY] << 8));
         public ushort Bc => (ushort)((registers[B] << 8) + registers[C]);
         public ushort De => (ushort)((registers[D] << 8) + registers[E]);
         public ushort Pc {
@@ -3037,6 +3039,51 @@ namespace z80
                         Wait(8);
                         return;
                     }
+                case 0x24:
+                    {
+                        var val = Inc( registers[IX] );
+
+                        registers[IX ] = (byte)(val & 0xff);
+#if (DEBUG)
+                        Log("INC ixh - undoc");
+#endif
+                        Wait(8);
+                        return;
+                    }
+                case 0x2c:
+                    {
+                        var val = Inc( registers[IXL] );
+
+                        registers[IXL ] = (byte)(val & 0xff);
+#if (DEBUG)
+                        Log("INC ixl - undoc");
+#endif
+                        Wait(8);
+                        return;
+                    }
+                case 0x25:
+                    {
+                        var val = Dec( registers[IX] );
+
+                        registers[IX ] = (byte)(val & 0xff);
+#if (DEBUG)
+                        Log("Dec ixh - undoc");
+#endif
+                        Wait(8);
+                        return;
+                    }
+
+                case 0x2d:
+                    {
+                        var val = Dec( registers[IXL] );
+
+                        registers[IXL ] = (byte)(val & 0xff);
+#if (DEBUG)
+                        Log("Dec ixl - undoc");
+#endif
+                        Wait(8);
+                        return;
+                    }
                 default:
                     Wait(8); // holes for DD
                     return;
@@ -3392,6 +3439,52 @@ namespace z80
                         Wait(8);
                         return;
                     }
+                case 0x24:
+                    {
+                        var val = Inc( registers[IY] );
+
+                        registers[IY ] = (byte)(val & 0xff);
+#if (DEBUG)
+                        Log("Inc iyh - undoc");
+#endif
+                        Wait(8);
+                        return;
+                    }
+
+                case 0x2c:
+                    {
+                        var val = Inc( registers[IYL] );
+
+                        registers[IYL ] = (byte)(val & 0xff);
+#if (DEBUG)
+                        Log("Inc iyl - undoc");
+#endif
+                        Wait(8);
+                        return;
+                    }
+                case 0x25:
+                    {
+                        var val = Dec( registers[IY] );
+
+                        registers[IY ] = (byte)(val & 0xff);
+#if (DEBUG)
+                        Log("Dec iyh - undoc");
+#endif
+                        Wait(8);
+                        return;
+                    }
+
+                case 0x2d:
+                    {
+                        var val = Dec( registers[IYL] );
+
+                        registers[IYL ] = (byte)(val & 0xff);
+#if (DEBUG)
+                        Log("Dec iyl - undoc");
+#endif
+                        Wait(8);
+                        return;
+                    }
                 default:
                     Wait(8); // holes for FD
                     return;
@@ -3597,6 +3690,14 @@ namespace z80
             return ( bMinuend & 0x0F ) - (bSubtrahend & 0x0F ) /* - GetFlag( Fl_C ) */ < 0;
         }
 
+        /// <summary>
+        /// 0X00 -> 0xff : s=1 z=0 h=1 v=0 n=1
+        /// 0x80 -> 0x7f : s=0 z=0 h=1 v=1 n=1
+        /// 0x10 -> 0x0f : s=0 z=0 h=1 v=0 n=1
+        /// 0x1f -> 0x1e : s=0 z=0 h=0 v=0 n=1
+        /// 0x01 -> 0x00 : s=0 z=1 h=0 v=0 n=1
+        /// 0x80 -> 0x80 : s=1 z=0 h=0 v=0 n=1
+        /// </summary>
         private byte Dec(byte b)
         {
             var sum = b - 1;
