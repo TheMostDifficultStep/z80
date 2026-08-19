@@ -3084,6 +3084,24 @@ namespace z80
                         Wait(8);
                         return;
                     }
+                case 0x26:
+                    {
+                        registers[IX] = Fetch();
+#if (DEBUG)
+                        Log("LD ixh, n");
+#endif
+                        Wait(11);
+                        return;
+                    }
+                case 0x2e:
+                    {
+                        registers[IXL] = Fetch();
+#if (DEBUG)
+                        Log("LD ixl, n");
+#endif
+                        Wait(11);
+                        return;
+                    }
                 default:
                     Wait(8); // holes for DD
                     return;
@@ -3483,6 +3501,24 @@ namespace z80
                         Log("Dec iyl - undoc");
 #endif
                         Wait(8);
+                        return;
+                    }
+                case 0x26:
+                    {
+                        registers[IY] = Fetch();
+#if (DEBUG)
+                        Log("LD iyh, n");
+#endif
+                        Wait(11);
+                        return;
+                    }
+                case 0x2e:
+                    {
+                        registers[IYL] = Fetch();
+#if (DEBUG)
+                        Log("LD iyl, n");
+#endif
+                        Wait(11);
                         return;
                     }
                 default:
