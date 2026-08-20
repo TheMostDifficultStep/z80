@@ -32,7 +32,7 @@ namespace z80 {
         }
 
         public void Run() {
-            for( int iInstr = 0x40; iInstr <= 0x5f; ++iInstr ) {
+            for( int iInstr = 0x40; iInstr <= 0x7f; ++iInstr ) {
                 byte r = (byte)(( iInstr >> 3 ) & 0x7);
                 byte l = (byte)(iInstr & 0x7 );
 

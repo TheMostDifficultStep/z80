@@ -8,14 +8,14 @@ namespace z80
 {
     public class Z80
     {
-        private const byte B = 0;
-        private const byte C = 1;
-        private const byte D = 2;
-        private const byte E = 3;
-        private const byte H = 4;
-        private const byte L = 5;
-        private const byte F = 6;
-        private const byte A = 7;
+        public const byte B = 0;
+        public const byte C = 1;
+        public const byte D = 2;
+        public const byte E = 3;
+        public const byte H = 4;
+        public const byte L = 5;
+        public const byte F = 6;
+        public const byte A = 7;
         private const byte Bp = 8;
         private const byte Cp = 9;
         private const byte Dp = 10;
@@ -33,7 +33,7 @@ namespace z80
         private const byte SP = 22;
         private const byte PC = 24;
         private readonly Z80Memory mem;
-        private readonly byte[] registers = new byte[26];
+        public readonly byte[] registers = new byte[26];
         private DateTime _clock = DateTime.UtcNow;
         private bool IFF1;
         private bool IFF2;
@@ -50,12 +50,12 @@ namespace z80
             S  = 0x80,
         }
 
-        const byte Fl_S  = 0x80;
-        const byte Fl_Z  = 0X40;
-        const byte Fl_H  = 0X10;
-        const byte Fl_PV = 0x04;
-        const byte Fl_N  = 0x02;
-        const byte Fl_C  = 0x01;
+        public const byte Fl_S  = 0x80;
+        public const byte Fl_Z  = 0X40;
+        public const byte Fl_H  = 0X10;
+        public const byte Fl_PV = 0x04;
+        public const byte Fl_N  = 0x02;
+        public const byte Fl_C  = 0x01;
 
         /// <summary>
         /// This function is probably best used by secifying a SINGLE
@@ -87,7 +87,20 @@ namespace z80
             Reset();
         }
 
-        public ushort Hl => (ushort)(registers[L] + (registers[H] << 8));
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="bReg">The HIGH register, LOW will be +1</param>
+        void SetRegisterPair( byte bReg, ushort uVal ) {
+            registers[bReg    ] = (byte)(uVal >> 8); // High
+            registers[bReg + 1] = (byte)(uVal);      // Lo
+        }
+
+        public ushort Hl {
+            get { return (ushort)(registers[L] + (registers[H] << 8)); }
+            set { SetRegisterPair( H, value ); }
+        }
+
         public ushort Sp {
             get { return (ushort)(registers[SP + 1] + (registers[SP] << 8)); }
             set { registers[SP    ] = (byte)(value >> 8); // High
@@ -178,28 +191,31 @@ namespace z80
             Halt = false;
         }
 
-        void HighStuff( byte r, byte lo ) {
-            var useHL1 = r == 6;
-            var useHL2 = lo == 6;
+        /// <summary>
+        /// </summary>
+        /// <param name="trg">instruction >> 3 & 0x7, max value is 7!</param>
+        /// <param name="src">instruction      & 0x7, max value is 7!</param>
+        public void LdInstructions( byte trg, byte src ) {
+            bool useHLtrg = trg == 6;
+            bool useHLsrc = src == 6;
 
-            if (useHL2 && useHL1)
-            {
-#if (DEBUG)
-                Log("HALT");
-#endif
-                Halt = true;
-                return;
+            var bValue = useHLsrc ? mem[Hl] : registers[src];
+
+            if( useHLtrg ) {
+               mem[Hl]        = bValue;
+            } else {
+               registers[trg] = bValue;
             }
-            var reg = useHL2 ? mem[Hl] : registers[lo];
 
-            if (useHL1)
-                mem[Hl] = reg;
-            else
-                registers[r] = reg;
-
-            Wait(useHL1 || useHL2 ? 7 : 4);
+            Wait( useHLtrg || useHLsrc ? 7 : 4 );
 #if (DEBUG)
-            Log($"LD {(useHL1 ? "(HL)" : RName(r))}, {(useHL2 ? "(HL)" : RName(lo))}");
+            byte bCheck = useHLtrg ? mem[Hl] : registers[trg];
+
+            Log( $"LD {(useHLtrg ? "(HL)" : RName(trg))}, " +
+                    $"{(useHLsrc ? "(HL)" : RName(src))} : " +
+                    bCheck.ToString( "X" ) + " (HL)=" + mem[Hl].ToString("X" )
+               );
+
 #endif
             return;
         }
@@ -274,8 +290,15 @@ namespace z80
             var lo = (byte)(mc & 0x07);
             var  r = (byte)((mc >> 3) & 0x07);
 
-            if (hi == 1) {
-                HighStuff( r, lo );
+            if ( mc >= 0x40 && mc <= 0x7f ) {
+                if( mc == 0x76 ) {
+#if (DEBUG)
+                    Log("HALT");
+#endif
+                    Halt = true;
+                    return;
+                }
+                LdInstructions( r, lo );
                 return;
             }
             switch (mc) {
@@ -447,6 +470,82 @@ namespace z80
                         Wait(6);
                         return;
                     }
+                // r  % 8 => Target reg where B=0...
+                // lo % 8 => Source reg
+                //case 0x40: // ld b, b 4t
+                //case 0x41: // ld b, c
+                //case 0x42: // ld b, d
+                //case 0x43: // ld b, e
+                //case 0x44: // ld b, h
+                //case 0x45: // ld b, l
+                //case 0x46: // ld b, (hl) 7t
+                //case 0x47: // ld b, a
+
+                //case 0x48: // ld c, b
+                //case 0x49: // ld c, c
+                //case 0x4a: // ld c, d
+                //case 0x4b: // ld c, e
+                //case 0x4c: // ld c, h
+                //case 0x4d: // ld c, l
+                //case 0x4e: // ld c, (hc)
+                //case 0x4f: // ld c, a
+
+                //case 0x50: // ld d, b
+                //case 0x51: // ld d, c
+                //case 0x52: // ld d, d
+                //case 0x53: // ld d, e
+                //case 0x54: // ld d, h
+                //case 0x55: // ld d, l
+                //case 0x56: // ld d, (hl)
+                //case 0x57: // ld d, a
+
+                //case 0x58: // ld e, b
+                //case 0x59: // ld e, c
+                //case 0x5a: // ld e, d
+                //case 0x5b: // ld e, e
+                //case 0x5c: // ld e, h
+                //case 0x5d: // ld e, l
+                //case 0x5e: // ld e, (hl)
+                //case 0x5f: // ld e, a
+
+                //case 0x60: // ld h, b
+                //case 0x61: // ld h, c
+                //case 0x62: // ld h, d
+                //case 0x63: // ld h, e
+                //case 0x64: // ld h, h
+                //case 0x65: // ld h, l
+                //case 0x66: // ld h, (hl)
+                //case 0x67: // ld h, a
+
+                //case 0x68: // ld l, b
+                //case 0x69: // ld l, c
+                //case 0x6a: // ld l, d
+                //case 0x6b: // ld l, e
+                //case 0x6c: // ld l, h
+                //case 0x6d: // ld l, l
+                //case 0x6e: // ld l, (hl)
+                //case 0x6f: // ld l, a
+
+                //case 0x70: // ld (hl), b
+                //case 0x71: // ld (hl), c
+                //case 0x72: // ld (hl), d
+                //case 0x73: // ld (hl), e
+                //case 0x74: // ld (hl), h
+                //case 0x75: // ld (hl), l
+                //case 0x76: // halt... interesting, no ld (hl), (hl)!
+                //case 0x77: // ld (hl) a
+
+                //case 0x78: // ld a, b
+                //case 0x79: // ld a, c
+                //case 0x7a: // ld a, d
+                //case 0x7b: // ld a, e
+                //case 0x7c: // ld a, h
+                //case 0x7d: // ld a, l
+                //case 0x7e: // ld a, (hl)
+                //case 0x7f: // ld a, a
+                //    {
+                //    throw new InvalidOperationException();
+                //    }
 
                 case 0xC5:
                     {
@@ -1807,31 +1906,29 @@ namespace z80
                         // LD A, I
 
                         /*
-                                     * Condition Bits Affected
-                                     * S is set if the I Register is negative; otherwise, it is reset.
-                                     * Z is set if the I Register is 0; otherwise, it is reset.
-                                     * H is reset.
-                                     * P/V contains contents of IFF2.
-                                     * N is reset.
-                                     * C is not affected.
-                                     * If an interrupt occurs during execution of this instruction, the Parity flag contains a 0.
-                                     */
+                        * Condition Bits Affected
+                        * S is set if the I Register is negative; otherwise, it is reset.
+                        * Z is set if the I Register is 0; otherwise, it is reset.
+                        * H is reset.
+                        * P/V contains contents of IFF2.
+                        * N is reset.
+                        * C is not affected.
+                        * If an interrupt occurs during execution of this instruction, the Parity flag contains a 0.
+                        */
                         var i = registers[I];
+                        var f = registers[F] & ~(Fl_H | Fl_PV | Fl_N | Fl_S | Fl_Z );
                         registers[A] = i;
-                        var f = (byte)(registers[F] & (~(byte)(Fl.H | Fl.PV | Fl.N | Fl.S | Fl.Z | Fl.PV)));
-                        if (i >= 0x80)
-                        {
-                            f |= (byte)Fl.S;
+
+                        if (( i & 0x80 ) != 0 ) {
+                            f |= Fl_S;
                         }
-                        else if (i == 0x00)
-                        {
-                            f |= (byte)Fl.Z;
+                        else if (i == 0x00) {
+                            f |= Fl_Z;
                         }
-                        if (IFF2)
-                        {
-                            f |= (byte)Fl.PV;
+                        if (IFF2) {
+                            f |= Fl_PV;
                         }
-                        registers[F] = f;
+                        registers[F] = (byte)f;
 #if (DEBUG)
                         Log("LD A, I");
 #endif
@@ -1843,31 +1940,29 @@ namespace z80
                         // LD A, R
 
                         /*
-                                     * Condition Bits Affected
-                                     * S is set if, R-Register is negative; otherwise, it is reset.
-                                     * Z is set if the R Register is 0; otherwise, it is reset.
-                                     * H is reset.
-                                     * P/V contains contents of IFF2.
-                                     * N is reset.
-                                     * C is not affected.
-                                     * If an interrupt occurs during execution of this instruction, the parity flag contains a 0. 
-                                     */
+                        * Condition Bits Affected
+                        * S is set if, R-Register is negative; otherwise, it is reset.
+                        * Z is set if the R Register is 0; otherwise, it is reset.
+                        * H is reset.
+                        * P/V contains contents of IFF2.
+                        * N is reset.
+                        * C is not affected.
+                        * If an interrupt occurs during execution of this instruction, the parity flag contains a 0. 
+                        */
                         var reg = registers[R];
+                        var f   = registers[F] & ~(Fl_H | Fl_PV | Fl_N | Fl_S | Fl_Z );
                         registers[A] = reg;
-                        var f = (byte)(registers[F] & (~(byte)(Fl.H | Fl.PV | Fl.N | Fl.S | Fl.Z | Fl.PV)));
-                        if (reg >= 0x80)
-                        {
-                            f |= (byte)Fl.S;
+
+                        if (( reg & 0x80 ) != 0 ) {
+                            f |= Fl_S;
                         }
-                        else if (reg == 0x00)
-                        {
-                            f |= (byte)Fl.Z;
+                        else if (reg == 0x00) {
+                            f |= Fl_Z;
                         }
-                        if (IFF2)
-                        {
-                            f |= (byte)Fl.PV;
+                        if (IFF2) {
+                            f |= Fl_PV;
                         }
-                        registers[F] = f;
+                        registers[F] = (byte)f;
 #if (DEBUG)
                         Log("LD A, R");
 #endif
@@ -3103,6 +3198,11 @@ namespace z80
                         return;
                     }
                 default:
+                    // Pic off the left over undocumented instr.
+                    if ( mc >= 0x40 && mc <= 0x7f ) {
+                        return;
+                    }
+
                     Wait(8); // holes for DD
                     return;
             }
@@ -3926,9 +4026,10 @@ namespace z80
         [Conditional("DEBUG")]private static void Log(string text)
         {
             //Console.CursorLeft = 20;
-            //Console.ForegroundColor = ConsoleColor.Cyan;
-            //Console.WriteLine(text);
-            //Console.ForegroundColor = ConsoleColor.White;
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine(text);
+            Console.ForegroundColor = ConsoleColor.White;
+
             iOutputCount = 0;
         }
 

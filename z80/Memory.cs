@@ -24,8 +24,8 @@ namespace z80
             Reset( memory, ramStart, fComFile:false );
         }
 
-        public Z80Memory() {
-            _memory   = new byte[0];
+        public Z80Memory( int iSize ) {
+            _memory   = new byte[iSize];
             _ramStart = 0;
         }
 
@@ -37,6 +37,8 @@ namespace z80
         /// <remarks>If it's a COM file then it starts at 0x100 and
         /// we have room for our CPM low memory stuff...</remarks>
         public byte[] RawMemory => _memory;
+
+        public int Length => _memory.Length;
 
         public void Reset( byte[] memory, ushort usProgEnd, bool fComFile ) {
             _memory   = memory;
