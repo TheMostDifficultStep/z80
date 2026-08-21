@@ -94,6 +94,8 @@ namespace z80
             _rgIntrMode.Add( InterruptMode1 );
             _rgIntrMode.Add( InterruptMode2 );
 
+            SetRanges( _rgDwOps );
+
             Reset();
         }
 
@@ -275,6 +277,23 @@ namespace z80
             var trg = (byte)((bInstr >> 3) & 0x07);
 
             registers[trg] = Add(mem[ (rgSrcMap[0x4] == Z80.IX) ? Ix : Iy ]);
+#if (DEBUG)
+            Log($"ADD {RName(trg)}, " + $"{RName(rgSrcMap[src])}" );
+#endif
+            Wait(8);
+            return;
+        }
+
+        /// <summary>
+        /// Sub to the target register either the *Ix or *Iy value
+        /// </summary>
+        /// <param name="bInstr">Current instruction.</param>
+        /// <param name="rgSrcMap">DD or FD map for the registers.</param>
+        protected void DwSubInstr( byte bInstr, byte[] rgSrcMap ) {
+            var src = (byte)( bInstr       & 0x07);
+            var trg = (byte)((bInstr >> 3) & 0x07);
+
+            registers[trg] = Sub(mem[ (rgSrcMap[0x4] == Z80.IX) ? Ix : Iy ]);
 #if (DEBUG)
             Log($"ADD {RName(trg)}, " + $"{RName(rgSrcMap[src])}" );
 #endif
@@ -864,7 +883,7 @@ namespace z80
                 case 0x97:
                     {
                         // SUB A, r
-                        Sub(registers[lo]);
+                        registers[A] = Sub(registers[lo]);
 #if (DEBUG)
                         Log($"SUB A, {RName(lo)}");
 #endif
@@ -875,7 +894,7 @@ namespace z80
                     {
                         // SUB A, n
                         var b = Fetch();
-                        Sub(b);
+                        registers[A] = Sub(b);
 #if (DEBUG)
                         Log($"SUB A, 0x{b:X2}");
 #endif
@@ -885,7 +904,7 @@ namespace z80
                 case 0x96:
                     {
                         // SUB A, (HL)
-                        Sub(mem[Hl]);
+                        registers[A] = Sub(mem[Hl]);
 #if (DEBUG)
                         Log("SUB A, (HL)");
 #endif
@@ -2854,29 +2873,30 @@ namespace z80
 
         private void ParseDD()
         {
-            if (Halt) return;
-            var mc = Fetch();
-            var hi = (byte)(mc >> 6);
-            var lo = (byte)(mc & 0x07);
+            if (Halt)
+                return;
+
+            var mc  = Fetch();
+            var lo  = (byte)(mc & 0x07);
             var mid = (byte)((mc >> 3) & 0x07);
 
             switch (mc)
             {
                 default:
                     // Pic off the left over undocumented instr.
-                    if ( mc >= 0x40 && mc <= 0x7f ) {
-                        DwLDInstr( mc, _rgIXLd );
-                        Wait(8); 
-                        return;
-                    } else {
-                        if( mc >= 0x80 && mc <= 0x8f ) {
+                    switch( FindToken( _rgDwOps, mc ) ) {
+                        case OpToken.LD:
+                            DwLDInstr ( mc, _rgIXLd );
+                            return;
+                        case OpToken.Add:
                             DwAddInstr( mc, _rgIXLd );
-                        } else {
-                            // holes for DD
-                            TryInsertMissingInstruction( 0xdd, mc );
-                        }
-                        return;
+                            return;
+                        case OpToken.Sub:
+                            DwSubInstr( mc, _rgIXLd );
+                            return;
                     }
+                    TryInsertMissingInstruction( 0xfd, mc );
+                    return;
                 case 0xCB:
                     {
                         ParseCB(0xDD);
@@ -3053,7 +3073,7 @@ namespace z80
                         var d = (sbyte)Fetch();
                         var b = mem[(ushort)(Ix + d)];
 
-                        Sub(b);
+                        registers[A] = Sub(b);
 #if (DEBUG)
                         Log($"SUB A, (IX{d:+0;-#})");
 #endif
@@ -3280,16 +3300,55 @@ namespace z80
                     }
             }
 #if (DEBUG)
-            Log($"DD {mc:X2}: {hi:X} {mid:X} {lo:X}");
+            Log($"DD {mc:X2}: {mid:X} {lo:X}");
 #endif
             Halt = true;
         }
 
+        protected enum OpToken {
+            LD, Add, Sub, Undef
+        }
+
+        protected class OpRange {
+            public OpRange( byte start, byte end, OpToken eToken ) {
+                _bStart = start;
+                _bEnd   = end;
+                _eToken = eToken;
+            }
+
+            public byte    _bStart;
+            public byte    _bEnd;
+            public OpToken _eToken;
+        }
+
+        /// <summary>
+        /// Call this in the constructor.
+        /// </summary>
+        protected void SetRanges( List<OpRange> rgOps) {
+            rgOps.Add( new OpRange( 0x40, 0x7f, OpToken.LD  ) );
+            rgOps.Add( new OpRange( 0x80, 0x8f, OpToken.Add ) );
+            rgOps.Add( new OpRange( 0x94, 0x9f, OpToken.Sub ) );
+        }
+
+        protected OpToken FindToken( List<OpRange> rgOps, byte mc ) {
+            foreach( OpRange oOp in rgOps ) {
+                if( ( mc >= oOp._bStart ) &&
+                    ( mc <= oOp._bEnd   ) ) 
+                {
+                    return oOp._eToken;
+                }
+            }
+            return OpToken.Undef;
+        }
+
+        readonly List<OpRange> _rgDwOps = new List<OpRange>();
+
         private void ParseFD()
         {
-            if (Halt) return;
+            if (Halt)
+                return;
+
             var mc = Fetch();
-            var hi = (byte)(mc >> 6);
             var lo = (byte)(mc & 0x07);
             var r  = (byte)((mc >> 3) & 0x07);
 
@@ -3297,19 +3356,19 @@ namespace z80
             {
                 default:
                     // Pic off the left over undocumented instr.
-                    if ( mc >= 0x40 && mc <= 0x7f ) {
-                        DwLDInstr( mc, _rgIYLd );
-                        Wait(8); 
-                        return;
-                    } else {
-                        if( mc >= 0x80 && mc <= 0x8f ) {
+                    switch( FindToken( _rgDwOps, mc ) ) {
+                        case OpToken.LD:
+                            DwLDInstr ( mc, _rgIYLd );
+                            return;
+                        case OpToken.Add:
                             DwAddInstr( mc, _rgIYLd );
-                        } else {
-                            // holes for DD
-                            TryInsertMissingInstruction( 0xdd, mc );
-                        }
-                        return;
+                            return;
+                        case OpToken.Sub:
+                            DwSubInstr( mc, _rgIYLd );
+                            return;
                     }
+                    TryInsertMissingInstruction( 0xfd, mc );
+                    return;
                 case 0xCB:
                     {
                         ParseCB(0xFD);
@@ -3484,7 +3543,7 @@ namespace z80
                         // SUB A, (IY+d)
                         var d = (sbyte)Fetch();
 
-                        Sub(mem[(ushort)(Iy + d)]);
+                        registers[A] = Sub(mem[(ushort)(Iy + d)]);
 #if (DEBUG)
                         Log($"SUB A, (IY{d:+0;-#})");
 #endif
@@ -3711,7 +3770,7 @@ namespace z80
                     }
             }
 #if (DEBUG)
-            Log($"FD {mc:X2}: {hi:X2} {lo:X2} {r:X2}");
+            Log($"FD {mc:X2}: {lo:X2} {r:X2}");
 #endif
             Halt = true;
         }
@@ -3779,12 +3838,10 @@ namespace z80
         /// if the unsigned value of A is less than the unsigned
         /// value of B then Carry is set.
         /// </summary>
-        private void Sub(byte n)
+        private byte Sub(byte n)
         {
             var a    = registers[A];
             var diff = a - n;
-
-            registers[A] = (byte)diff;
 
             var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C ));
 
@@ -3804,6 +3861,8 @@ namespace z80
                 f |= Fl_C;
 
             registers[F] = f;
+
+            return (byte)diff;
         }
 
         private void Sbc(byte n)
