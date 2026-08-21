@@ -70,6 +70,16 @@ namespace z80
         public IPorts                 Ports { get; set; }
         private readonly List<Action> _rgIntrMode = new List<Action>(3);
 
+        public SortedList<int, int> _rgMissingInstructions = new SortedList<int, int>();
+
+        protected void TryInsertMissingInstruction( byte bUpper, byte bLower ) {
+            int iInstr = ( bUpper << 8 ) + bLower;
+
+            if( !_rgMissingInstructions.ContainsKey( iInstr ) ) {
+                _rgMissingInstructions.Add( iInstr, iInstr );
+            }
+        }
+
         /// <remarks>
         /// memory is just an array access. We use it in case we want to
         /// debug memory access. 
@@ -215,8 +225,60 @@ namespace z80
                     $"{(useHLsrc ? "(HL)" : RName(src))} : " +
                     bCheck.ToString( "X" ) + " (HL)=" + mem[Hl].ToString("X" )
                );
-
 #endif
+            return;
+        }
+
+        static readonly byte[] _rgIXLd = { B, C, D, E, IX, IXL, 0x80, A }; // DD two byte instr
+        static readonly byte[] _rgIYLd = { B, C, D, E, IY, IYL, 0x80, A }; // FD two byte instr
+
+        /// <summary>
+        /// Handle 2 byte instructions 0x40 -> 0x6f for either
+        /// ix or iy registers.
+        /// </summary>
+        protected void DwLDInstr( byte bInstr, byte[] rgMap ) {
+            var src = (byte)( bInstr       & 0x07);
+            var trg = (byte)((bInstr >> 3) & 0x07);
+
+            byte bValue = registers[rgMap[src]];
+
+            // Special case 0x60 -> 0x6f
+            if( ( bInstr & 0xF0 ) == 0x60 ) {
+                if( ( bInstr & 0x08 ) == 0 ) {
+                    trg = rgMap[0x4]; // 0x60 -> 0x67
+                } else {
+                    trg = rgMap[0x5]; // 0x68 -> 0x6f
+                }
+            }
+            
+            registers[trg] = bValue;
+
+            Wait( 8 );
+#if (DEBUG)
+            if( src == 6 ) {
+                throw new InvalidOperationException( "" );
+            }
+            Log( $"LD {RName(trg)}, " +
+                    $"{RName(rgMap[src])} : " +
+                    registers[trg].ToString( "X" )
+               );
+#endif
+        }
+
+        /// <summary>
+        /// Add to the target register either the *Ix or *Iy value
+        /// </summary>
+        /// <param name="bInstr">Current instruction.</param>
+        /// <param name="rgSrcMap">DD or FD map for the registers.</param>
+        protected void DwAddInstr( byte bInstr, byte[] rgSrcMap ) {
+            var src = (byte)( bInstr       & 0x07);
+            var trg = (byte)((bInstr >> 3) & 0x07);
+
+            registers[trg] = Add(mem[ (rgSrcMap[0x4] == Z80.IX) ? Ix : Iy ]);
+#if (DEBUG)
+            Log($"ADD {RName(trg)}, " + $"{RName(rgSrcMap[src])}" );
+#endif
+            Wait(8);
             return;
         }
 
@@ -290,18 +352,21 @@ namespace z80
             var lo = (byte)(mc & 0x07);
             var  r = (byte)((mc >> 3) & 0x07);
 
-            if ( mc >= 0x40 && mc <= 0x7f ) {
-                if( mc == 0x76 ) {
-#if (DEBUG)
-                    Log("HALT");
-#endif
-                    Halt = true;
-                    return;
-                }
-                LdInstructions( r, lo );
-                return;
-            }
             switch (mc) {
+                default:
+                    if ( mc >= 0x40 && mc <= 0x7f ) {
+                        if( mc == 0x76 ) {
+        #if (DEBUG)
+                            Log("HALT");
+        #endif
+                            Halt = true;
+                            return;
+                        }
+                        LdInstructions( r, lo );
+                    } else {
+                        TryInsertMissingInstruction( 0x00, mc );
+                    }
+                    return;
                 case 0xCB:
                     ParseCB();
                     return;
@@ -724,7 +789,7 @@ namespace z80
                 case 0x87:
                     {
                         // ADD A, r
-                        Add(registers[lo]);
+                        registers[A] = Add(registers[lo]);
 #if (DEBUG)
                         Log($"ADD A, {RName(lo)}");
 #endif
@@ -735,7 +800,7 @@ namespace z80
                     {
                         // ADD A, n
                         var b = Fetch();
-                        Add(b);
+                        registers[A] = Add(b);
 #if (DEBUG)
                         Log($"ADD A, 0x{b:X2}");
 #endif
@@ -746,7 +811,7 @@ namespace z80
                 case 0x86:
                     {
                         // ADD A, (HL)
-                        Add(mem[Hl]);
+                        registers[A] = Add(mem[Hl]);
 #if (DEBUG)
                         Log("ADD A, (HL)");
 #endif
@@ -1097,12 +1162,12 @@ namespace z80
                         var f = registers[F];
                         if ((a & 0x0F) > 0x09 || (f & (byte)Fl.H) > 0)
                         {
-                            Add(0x06);
+                            registers[A] = Add(0x06);
                             a = registers[A];
                         }
                         if ((a & 0xF0) > 0x90 || (f & (byte)Fl.C) > 0)
                         {
-                            Add(0x60);
+                            registers[A] = Add(0x60);
                         }
 #if (DEBUG)
                         Log("DAA");
@@ -2777,6 +2842,7 @@ namespace z80
                         return;
                     }
                 default:
+                    TryInsertMissingInstruction( 0xed, mc );
                     Wait( 8 ); // 4 for the ED and 4 for the hole.
                     return;
             }
@@ -2796,6 +2862,21 @@ namespace z80
 
             switch (mc)
             {
+                default:
+                    // Pic off the left over undocumented instr.
+                    if ( mc >= 0x40 && mc <= 0x7f ) {
+                        DwLDInstr( mc, _rgIXLd );
+                        Wait(8); 
+                        return;
+                    } else {
+                        if( mc >= 0x80 && mc <= 0x8f ) {
+                            DwAddInstr( mc, _rgIXLd );
+                        } else {
+                            // holes for DD
+                            TryInsertMissingInstruction( 0xdd, mc );
+                        }
+                        return;
+                    }
                 case 0xCB:
                     {
                         ParseCB(0xDD);
@@ -2947,7 +3028,7 @@ namespace z80
                         // ADD A, (IX+d)
                         var d = (sbyte)Fetch();
 
-                        Add(mem[(ushort)(Ix + d)]);
+                        registers[A] = Add(mem[(ushort)(Ix + d)]);
 #if (DEBUG)
                         Log($"ADD A, (IX{d:+0;-#})");
 #endif
@@ -3197,14 +3278,6 @@ namespace z80
                         Wait(11);
                         return;
                     }
-                default:
-                    // Pic off the left over undocumented instr.
-                    if ( mc >= 0x40 && mc <= 0x7f ) {
-                        return;
-                    }
-
-                    Wait(8); // holes for DD
-                    return;
             }
 #if (DEBUG)
             Log($"DD {mc:X2}: {hi:X} {mid:X} {lo:X}");
@@ -3218,10 +3291,25 @@ namespace z80
             var mc = Fetch();
             var hi = (byte)(mc >> 6);
             var lo = (byte)(mc & 0x07);
-            var r = (byte)((mc >> 3) & 0x07);
+            var r  = (byte)((mc >> 3) & 0x07);
 
             switch (mc)
             {
+                default:
+                    // Pic off the left over undocumented instr.
+                    if ( mc >= 0x40 && mc <= 0x7f ) {
+                        DwLDInstr( mc, _rgIYLd );
+                        Wait(8); 
+                        return;
+                    } else {
+                        if( mc >= 0x80 && mc <= 0x8f ) {
+                            DwAddInstr( mc, _rgIYLd );
+                        } else {
+                            // holes for DD
+                            TryInsertMissingInstruction( 0xdd, mc );
+                        }
+                        return;
+                    }
                 case 0xCB:
                     {
                         ParseCB(0xFD);
@@ -3621,9 +3709,6 @@ namespace z80
                         Wait(11);
                         return;
                     }
-                default:
-                    Wait(8); // holes for FD
-                    return;
             }
 #if (DEBUG)
             Log($"FD {mc:X2}: {hi:X2} {lo:X2} {r:X2}");
@@ -3631,42 +3716,62 @@ namespace z80
             Halt = true;
         }
 
-        private void Add(byte b)
+        /// <summary>
+        /// Add the given byte to the accumulator. Set the flags
+        /// </summary>
+        /// <param name="n">Value to add to the accumulator.</param>
+        /// <returns>The resulting value.</returns>
+        private byte Add(byte n)
         {
-            var a = registers[A];
-            var sum = a + b;
-            registers[A] = (byte)sum;
-            var f = (byte)(registers[F] & 0x28);
+            var a   = registers[A];
+            var sum = a + n;
+
+            //registers[A] = (byte)sum;
+
+            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N ));
             if ((sum & 0x80) > 0)
-                f |= (byte)Fl.S;
+                f |= Fl_S;
             if ((byte)sum == 0)
-                f |= (byte)Fl.Z;
-            if ((a & 0xF + b & 0xF) > 0xF)
-                f |= (byte)Fl.H;
-            if ((a >= 0x80 && b >= 0x80 && (sbyte)sum > 0) || (a < 0x80 && b < 0x80 && (sbyte)sum < 0))
-                f |= (byte)Fl.PV;
+                f |= Fl_Z;
+            if ((a & 0xF + n & 0xF) > 0xF)
+                f |= Fl_H;
+            // If A and n are both negative (-1 to -128) and the
+            // sum becomes positive (>+127), P/V is set (1).
+            // If accumulator (A) and operand (n) are both positive (+1 to +127)
+            // and the sum becomes negative (<-128 in two's complement), P/V is set (1).
+            if (( (a & 0x80) >0 && (n & 0x80) >0 && ( sum & 0x80 ) == 0 ) || 
+                ( (a & 0x80)==0 && (n & 0x80)==0 && ( sum & 0x80 ) >  0 ) )
+                f |= Fl_PV;
             if (sum > 0xFF)
-                f |= (byte)Fl.C;
+                f |= Fl_C;
+
             registers[F] = f;
+
+            return (byte)sum;
         }
 
-        private void Adc(byte b)
+        private void Adc(byte n)
         {
-            var a = registers[A];
-            var c = (byte)(registers[F] & (byte)Fl.C);
-            var sum = a + b + c;
+            var a   = registers[A];
+            var c   = ((registers[F] & Fl_C) > 0 ) ? 1 : 0;
+            var sum = a + n + c;
+
             registers[A] = (byte)sum;
-            var f = (byte)(registers[F] & 0x28);
+
+            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N ));
+
             if ((sum & 0x80) > 0)
-                f |= (byte)Fl.S;
+                f |= Fl_S;
             if ((byte)sum == 0)
-                f |= (byte)Fl.Z;
-            if ((a & 0xF + b & 0xF) > 0xF)
-                f |= (byte)Fl.H;
-            if ((a >= 0x80 && b >= 0x80 && (sbyte)sum > 0) || (a < 0x80 && b < 0x80 && (sbyte)sum < 0))
-                f |= (byte)Fl.PV;
-            f = (byte)(f & ~(byte)Fl.N);
-            if (sum > 0xFF) f |= (byte)Fl.C;
+                f |= Fl_Z;
+            if ((a & 0xF + n & 0xF) > 0xF)
+                f |= Fl_H;
+            if (( (a & 0x80) >0 && (n & 0x80) >0 && ( sum & 0x80 ) == 0 ) || 
+                ( (a & 0x80)==0 && (n & 0x80)==0 && ( sum & 0x80 ) >  0 ) )
+                f |= Fl_PV;
+            if (sum > 0xFF) 
+                f |= Fl_C;
+
             registers[F] = f;
         }
 
@@ -3674,50 +3779,56 @@ namespace z80
         /// if the unsigned value of A is less than the unsigned
         /// value of B then Carry is set.
         /// </summary>
-        private void Sub(byte b)
+        private void Sub(byte n)
         {
-            var a = registers[A];
-            var diff = a - b;
+            var a    = registers[A];
+            var diff = a - n;
+
             registers[A] = (byte)diff;
-            var f = (byte)(registers[F] & 0x28);
+
+            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C ));
 
             if ((diff & 0x80) > 0)
-                f |= (byte)Fl.S;
+                f |= Fl_S;
             if (diff == 0)
-                f |= (byte)Fl.Z;
-            if ((a & 0xF) < (b & 0xF))
-                f |= (byte)Fl.H;
-            if ((a >= 0x80 && b >= 0x80 && (sbyte)diff > 0) || (a < 0x80 && b < 0x80 && (sbyte)diff < 0))
-                f |= (byte)Fl.PV;
+                f |= Fl_Z;
+            if ((a & 0xF) < (n & 0xF))
+                f |= Fl_H;
+            if ( (((a & 0x80) ^ (n    & 0x80) ) |
+                  ((a & 0x80) ^ (diff & 0x80) ) ) > 0)
+                f |= Fl_PV;
 
-            f |= (byte)Fl.N;
+            f |= Fl_N; 
 
             if (diff < 0)
-                f |= (byte)Fl.C;
+                f |= Fl_C;
 
             registers[F] = f;
         }
 
-        private void Sbc(byte b)
+        private void Sbc(byte n)
         {
-            var a = registers[A];
-            var c = (byte)(registers[F] & 0x01);
-            var diff = a - b - c;
+            var a    = registers[A];
+            var c    = ((registers[F] & Fl_C) > 0 ) ? 1 : 0;
+            var diff = a - n - c;
+
             registers[A] = (byte)diff;
-            var f = (byte)(registers[F] & 0x28);
+
+            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C ));
+
             if ((diff & 0x80) > 0) 
-                f |= (byte)Fl.S;
+                f |= Fl_S;
             if (diff == 0) 
-                f |= (byte)Fl.Z;
-            if ((a & 0xF) < (b & 0xF) + c) 
-                f |= (byte)Fl.H;
-            if ((a >= 0x80 && b >= 0x80 && (sbyte)diff > 0) || 
-                (a <  0x80 && b <  0x80 && (sbyte)diff < 0) )
-                f |= (byte)Fl.PV;
-            f |= (byte)Fl.N;
+                f |= Fl_Z;
+            if ((a & 0xF) < (n & 0xF) + c) 
+                f |= Fl_H;
+            if ( (((a & 0x80) ^ (n    & 0x80) ) |
+                  ((a & 0x80) ^ (diff & 0x80) ) ) > 0)
+                f |= Fl_PV;
+            f |= Fl_N;
 
             if (diff < 0 )  // was diff > 0xFF
-                f |= (byte)Fl.C;
+                f |= Fl_C;
 
             registers[F] = f;
         }
