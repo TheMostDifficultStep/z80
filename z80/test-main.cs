@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net.NetworkInformation;
 
 namespace z80 {
     public class TestPorts : IPorts {
@@ -52,12 +53,100 @@ namespace z80 {
             }
         }
 
+        public bool CmpF( bool z, bool s, bool h, bool pv, bool n, bool c ) {
+            byte bFReg = Cpu.registers[Z80.F];
+
+            if( ( bFReg & Z80.Fl_Z ) > 0 != z )
+                return false;
+            if( ( bFReg & Z80.Fl_S ) > 0 != s )
+                return false;
+            if( ( bFReg & Z80.Fl_H ) > 0 != h )
+                return false;
+            if( ( bFReg & Z80.Fl_PV ) > 0 != pv )
+                return false;
+            if( ( bFReg & Z80.Fl_N ) > 0 != n )
+                return false;
+            if( ( bFReg & Z80.Fl_C ) > 0 != c )
+                return false;
+
+            return true;
+        }
+
+        public void RunAdd() {
+            Cpu.registers[Z80.A] = 0x00;
+            Cpu.Add( 0 ); // z=1, s=0, h=0, pv=0, n=0, c=0
+            CmpF( z:true, s:false, h:false, pv:false, n:false, c:false );
+
+            Cpu.registers[Z80.A] = 0xff;
+            Cpu.Add( 0 ); // z=0, s=1, h=0, pv=0, n=0, c=0
+            CmpF( z:false, s:true, h:false, pv:false, n:false, c:false );
+
+            Cpu.registers[Z80.A] = 0xff;
+            Cpu.Add( 1 ); // z=1, s=0, h=1, pv=0, n=0, c=1
+            CmpF( z:true, s:false, h:true, pv:false, n:false, c:true );
+
+            Cpu.registers[Z80.A] = 0xfe;
+            Cpu.Add( 1 ); // z=0, s=1, h=0, pv=0, n=0, c=0
+            CmpF( z:false, s:true, h:false, pv:false, n:false, c:false );
+
+            Cpu.registers[Z80.A] = 0x7f;
+            Cpu.Add( 1 ); // z=0, s=1, h=1, pv=1, n=0, c=0
+            CmpF( z:false, s:true, h:true, pv:true, n:false, c:false );
+
+            Cpu.registers[Z80.A] = 0x80;
+            Cpu.Add( 0xff ); // z=0, s=0, h=0(s/b 1), pv=1, n=0, c=1
+            CmpF( z:false, s:false, h:true, pv:true, n:false, c:true );
+
+            Cpu.registers[Z80.A] = 0x0f;
+            Cpu.Add( 0x01 ); // z=0, s=0, h=1, pv=0, n=0, c=0
+            CmpF( z:false, s:false, h:true, pv:false, n:false, c:false );
+
+            Cpu.registers[Z80.A] = 0x7f;
+            Cpu.Add( 0x0f ); // z=0, s=1, h=1, pv=1, n=0, c=0
+            CmpF( z:false, s:true, h:true, pv:true, n:false, c:false );
+        }
+
+        public void RunSub() {
+            Cpu.registers[Z80.A] = 0x00;
+            Cpu.Sub( 0x00 ); 
+            CmpF( z:true, s:false, h:false, pv:false, n:true, c:false );
+
+            Cpu.registers[Z80.A] = 0x80;
+            Cpu.Sub( 0x80 ); 
+            CmpF( z:true, s:false, h:false, pv:false, n:true, c:false );
+
+            Cpu.registers[Z80.A] = 0x00;
+            Cpu.Sub( 0x01 ); 
+            CmpF( z:false, s:true, h:true, pv:false, n:true, c:true );
+
+            Cpu.registers[Z80.A] = 0x01;
+            Cpu.Sub( 0x01 ); 
+            CmpF( z:true, s:false, h:false, pv:false, n:true, c:false );
+
+            Cpu.registers[Z80.A] = 0x7f;
+            Cpu.Sub( 0x81 ); 
+            CmpF( z:false, s:true, h:true, pv:true, n:true, c:true );
+
+            Cpu.registers[Z80.A] = 0x80;
+            Cpu.Sub( 0x01 ); 
+            CmpF( z:false, s:false, h:true, pv:true, n:true, c:false );
+
+            Cpu.registers[Z80.A] = 0x10;
+            Cpu.Sub( 0x01 ); 
+            CmpF( z:false, s:false, h:true, pv:false, n:true, c:false );
+
+            Cpu.registers[Z80.A] = 0x0f;
+            Cpu.Sub( 0x10 ); 
+            CmpF( z:false, s:true, h:false, pv:false, n:true, c:true );
+
+        }
+
         static void Main(string[] args)
         {
             Console.WriteLine("Test LD 0x40 -> 0x7f");
 
             Program oProg = new Program();
-            oProg.Run();
+            oProg.RunSub();
         }
     }
 }
