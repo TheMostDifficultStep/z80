@@ -235,7 +235,7 @@ namespace z80
         static readonly byte[] _rgIYLd = { B, C, D, E, IY, IYL, 0x80, A }; // FD two byte instr
 
         /// <summary>
-        /// Handle 2 byte instructions 0x40 -> 0x6f for either
+        /// Handle 2 byte instructions 0x64 & 0x65 for either
         /// ix or iy registers.
         /// </summary>
         protected void DwLDInstr( byte bInstr, byte[] rgMap ) {
@@ -244,12 +244,11 @@ namespace z80
 
             byte bValue = registers[rgMap[src]];
 
-            // Special case 0x60 -> 0x6f
             if( ( bInstr & 0xF0 ) == 0x60 ) {
                 if( ( bInstr & 0x08 ) == 0 ) {
-                    trg = rgMap[0x4]; // 0x60 -> 0x67
+                    trg = rgMap[0x4]; // 0x60 -> 0x67 ixh
                 } else {
-                    trg = rgMap[0x5]; // 0x68 -> 0x6f
+                    trg = rgMap[0x5]; // 0x68 -> 0x6f ixl
                 }
             }
             
@@ -268,34 +267,61 @@ namespace z80
         }
 
         /// <summary>
-        /// Add to the target register either the *Ix or *Iy value
+        /// Perform Add on b, c, d, e, ixh, ixl, *, a
         /// </summary>
-        /// <param name="bInstr">Current instruction.</param>
+        /// <param name="bInstr">Either a DD or FD range of instr</param>
         /// <param name="rgSrcMap">DD or FD map for the registers.</param>
         protected void DwAddInstr( byte bInstr, byte[] rgSrcMap ) {
             var src = (byte)( bInstr       & 0x07);
-            var trg = (byte)((bInstr >> 3) & 0x07);
 
-            registers[trg] = Add(mem[ (rgSrcMap[0x4] == Z80.IX) ? Ix : Iy ]);
+            registers[A] = Add(registers[rgSrcMap[src]]);
 #if (DEBUG)
-            Log($"ADD {RName(trg)}, " + $"{RName(rgSrcMap[src])}" );
+            Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
 #endif
             Wait(8);
             return;
         }
 
-        /// <summary>
-        /// Sub to the target register either the *Ix or *Iy value
-        /// </summary>
-        /// <param name="bInstr">Current instruction.</param>
-        /// <param name="rgSrcMap">DD or FD map for the registers.</param>
+        /// <see cref="DwAddInstr(byte, byte[])"
         protected void DwSubInstr( byte bInstr, byte[] rgSrcMap ) {
             var src = (byte)( bInstr       & 0x07);
-            var trg = (byte)((bInstr >> 3) & 0x07);
 
-            registers[trg] = Sub(mem[ (rgSrcMap[0x4] == Z80.IX) ? Ix : Iy ]);
+            registers[A] = Sub(registers[rgSrcMap[src]]);
 #if (DEBUG)
-            Log($"ADD {RName(trg)}, " + $"{RName(rgSrcMap[src])}" );
+            Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
+#endif
+            Wait(8);
+            return;
+        }
+
+        protected void DwAndInstr( byte bInstr, byte[] rgSrcMap ) {
+            var src = (byte)( bInstr & 0x07);
+
+            And( registers[rgSrcMap[src]] );
+#if (DEBUG)
+            Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
+#endif
+            Wait(8);
+            return;
+        }
+
+        protected void DwOrInstr( byte bInstr, byte[] rgSrcMap ) {
+            var src = (byte)( bInstr & 0x07);
+
+            Or( registers[rgSrcMap[src]] );
+#if (DEBUG)
+            Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
+#endif
+            Wait(8);
+            return;
+        }
+
+        protected void DwXorInstr( byte bInstr, byte[] rgSrcMap ) {
+            var src = (byte)( bInstr & 0x07);
+
+            Xor( registers[rgSrcMap[src]] );
+#if (DEBUG)
+            Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
 #endif
             Wait(8);
             return;
@@ -2894,6 +2920,15 @@ namespace z80
                         case OpToken.Sub:
                             DwSubInstr( mc, _rgIXLd );
                             return;
+                        case OpToken.And:
+                            DwAndInstr( mc, _rgIXLd );
+                            return;
+                        case OpToken.Or:
+                            DwOrInstr ( mc, _rgIXLd );
+                            return;
+                        case OpToken.Xor:
+                            DwXorInstr( mc, _rgIXLd );
+                            return;
                     }
                     TryInsertMissingInstruction( 0xfd, mc );
                     return;
@@ -3306,7 +3341,7 @@ namespace z80
         }
 
         protected enum OpToken {
-            LD, Add, Sub, Undef
+            LD, Add, Sub, And, Or, Xor, Undef
         }
 
         protected class OpRange {
@@ -3326,8 +3361,11 @@ namespace z80
         /// </summary>
         protected void SetRanges( List<OpRange> rgOps) {
             rgOps.Add( new OpRange( 0x40, 0x7f, OpToken.LD  ) );
-            rgOps.Add( new OpRange( 0x80, 0x8f, OpToken.Add ) );
-            rgOps.Add( new OpRange( 0x94, 0x9f, OpToken.Sub ) );
+            rgOps.Add( new OpRange( 0x80, 0x87, OpToken.Add ) );
+            rgOps.Add( new OpRange( 0x90, 0x9f, OpToken.Sub ) );
+            rgOps.Add( new OpRange( 0xa0, 0xa7, OpToken.And ) );
+            rgOps.Add( new OpRange( 0xa8, 0xaf, OpToken.Xor ) );
+            rgOps.Add( new OpRange( 0xb0, 0xb7, OpToken.Or  ) );
         }
 
         protected OpToken FindToken( List<OpRange> rgOps, byte mc ) {
@@ -3365,6 +3403,15 @@ namespace z80
                             return;
                         case OpToken.Sub:
                             DwSubInstr( mc, _rgIYLd );
+                            return;
+                        case OpToken.And:
+                            DwAndInstr( mc, _rgIYLd );
+                            return;
+                        case OpToken.Or:
+                            DwOrInstr ( mc, _rgIYLd );
+                            return;
+                        case OpToken.Xor:
+                            DwXorInstr( mc, _rgIYLd );
                             return;
                     }
                     TryInsertMissingInstruction( 0xfd, mc );
@@ -3892,47 +3939,61 @@ namespace z80
             registers[F] = f;
         }
 
-        private void And(byte b)
+        private void And(byte n)
         {
-            var a = registers[A];
-            var res = (byte)(a & b);
-            registers[A] = res;
-            var f = (byte)(registers[F] & 0x28);
-            if ((res & 0x80) > 0) f |= (byte)Fl.S;
-            if (res == 0) f |= (byte)Fl.Z;
-            f |= (byte)Fl.H;
-            if (Parity(res)) f |= (byte)Fl.PV;
+            var a   = registers[A];
+            var res = (byte)(a & n);
+            var f   = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N  ));
+
+            if ((res & 0x80) > 0) 
+                f |= Fl_S;
+            if (res == 0) 
+                f |= Fl_Z;
+            if ((a & 0xF + n & 0xF) > 0xF)
+                f |= Fl_H;
+            if (Parity(res)) 
+                f |= Fl_PV;
+
             registers[F] = f;
+            registers[A] = res;
         }
 
-        private void Or(byte b)
+        private void Or(byte n)
         {
-            var a = registers[A];
-            var res = (byte)(a | b);
-            registers[A] = res;
-            var f = (byte)(registers[F] & 0x28);
+            var a   = registers[A];
+            var res = (byte)(a | n);
+            var f   = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N  ));
+
             if ((res & 0x80) > 0)
-                f |= (byte)Fl.S;
+                f |= Fl_S;
             if (res == 0)
-                f |= (byte)Fl.Z;
+                f |= Fl_Z;
+            if ((a & 0xF + n & 0xF) > 0xF)
+                f |= Fl_H;
             if (Parity(res))
-                f |= (byte)Fl.PV;
+                f |= Fl_PV;
+
             registers[F] = f;
+            registers[A] = res;
         }
 
-        private void Xor(byte b)
+        private void Xor(byte n)
         {
-            var a = registers[A];
-            var res = (byte)(a ^ b);
-            registers[A] = res;
-            var f = (byte)(registers[F] & 0x28);
+            var a   = registers[A];
+            var res = (byte)(a ^ n);
+            var f   = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N ));
+
             if ((res & 0x80) > 0)
-                f |= (byte)Fl.S;
+                f |= Fl_S;
             if (res == 0)
-                f |= (byte)Fl.Z;
+                f |= Fl_Z;
+            if ((a & 0xF + n & 0xF) > 0xF)
+                f |= Fl_H;
             if (Parity(res))
-                f |= (byte)Fl.PV;
+                f |= Fl_PV;
+
             registers[F] = f;
+            registers[A] = res;
         }
 
         private void Cmp(byte b)
