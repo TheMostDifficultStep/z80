@@ -3947,7 +3947,7 @@ namespace z80
         /// if the unsigned value of A is less than the unsigned
         /// value of B then Carry is set.
         /// </summary>
-        private void Sub(byte n)
+        public void Sub(byte n)
         {
             var a    = registers[A];
             var diff = a - n;
@@ -3958,10 +3958,9 @@ namespace z80
                 f |= Fl_S;
             if (diff == 0)
                 f |= Fl_Z;
-            if ((a & 0xF) < (n & 0xF))
+            if ((((a & 0x0F) - (n & 0x0F)) & 0x10) != 0 )
                 f |= Fl_H;
-            if ( (((a & 0x80) ^ (n    & 0x80) ) |
-                  ((a & 0x80) ^ (diff & 0x80) ) ) > 0)
+            if (((a ^ n) & (a ^ diff) & 0x80) != 0)
                 f |= Fl_PV;
 
             f |= Fl_N; 
@@ -3979,18 +3978,15 @@ namespace z80
             var c    = ((registers[F] & Fl_C) > 0 ) ? 1 : 0;
             var diff = a - n - c;
 
-            registers[A] = (byte)diff;
-
             var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C ));
 
             if ((diff & 0x80) > 0) 
                 f |= Fl_S;
             if (diff == 0) 
                 f |= Fl_Z;
-            if ((a & 0xF) < (n & 0xF) + c) 
+            if ((((a & 0x0F) - ((n-c) & 0x0F)) & 0x10) != 0 )
                 f |= Fl_H;
-            if ( (((a & 0x80) ^ (n    & 0x80) ) |
-                  ((a & 0x80) ^ (diff & 0x80) ) ) > 0)
+            if (((a ^ (n-c)) & (a ^ diff) & 0x80) != 0)
                 f |= Fl_PV;
             f |= Fl_N;
 
@@ -3998,6 +3994,7 @@ namespace z80
                 f |= Fl_C;
 
             registers[F] = f;
+            registers[A] = (byte)diff;
         }
 
         private void And(byte n)
