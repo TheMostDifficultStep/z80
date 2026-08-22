@@ -3897,7 +3897,7 @@ namespace z80
         /// </summary>
         /// <param name="n">Value to add to the accumulator.</param>
         /// <returns>The resulting value.</returns>
-        private void Add(byte n)
+        public void Add(byte n)
         {
             var a   = registers[A];
             var sum = a + n;
@@ -3905,20 +3905,15 @@ namespace z80
             //registers[A] = (byte)sum;
 
             var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N ));
-            if ((sum & 0x80) > 0)
+            if((sum & 0x80) > 0)
                 f |= Fl_S;
-            if ((byte)sum == 0)
+            if((byte)sum == 0)
                 f |= Fl_Z;
-            if ((a & 0xF + n & 0xF) > 0xF)
+            if((((a & 0x0F) + ( n & 0x0F ) ) & 0x10 ) != 0 ) // 0x10 looks at bit 4!
                 f |= Fl_H;
-            // If A and n are both negative (-1 to -128) and the
-            // sum becomes positive (>+127), P/V is set (1).
-            // If accumulator (A) and operand (n) are both positive (+1 to +127)
-            // and the sum becomes negative (<-128 in two's complement), P/V is set (1).
-            if (( (a & 0x80) >0 && (n & 0x80) >0 && ( sum & 0x80 ) == 0 ) || 
-                ( (a & 0x80)==0 && (n & 0x80)==0 && ( sum & 0x80 ) >  0 ) )
+            if(((a ^ sum ) & ( n ^ sum ) & 0x80 ) != 0 )
                 f |= Fl_PV;
-            if (sum > 0xFF)
+            if(sum > 0xFF)
                 f |= Fl_C;
 
             registers[F] = f;
@@ -3931,23 +3926,21 @@ namespace z80
             var c   = ((registers[F] & Fl_C) > 0 ) ? 1 : 0;
             var sum = a + n + c;
 
-            registers[A] = (byte)sum;
-
             var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N ));
 
             if ((sum & 0x80) > 0)
                 f |= Fl_S;
             if ((byte)sum == 0)
                 f |= Fl_Z;
-            if ((a & 0xF + n & 0xF) > 0xF)
+            if((((a & 0x0F) + ( n+c & 0x0F ) ) & 0x10 ) != 0 ) // 0x10 looks at bit 4!
                 f |= Fl_H;
-            if (( (a & 0x80) >0 && (n & 0x80) >0 && ( sum & 0x80 ) == 0 ) || 
-                ( (a & 0x80)==0 && (n & 0x80)==0 && ( sum & 0x80 ) >  0 ) )
+            if(((a ^ sum ) & ( n+c ^ sum ) & 0x80 ) != 0 )
                 f |= Fl_PV;
             if (sum > 0xFF) 
                 f |= Fl_C;
 
             registers[F] = f;
+            registers[A] = (byte)sum;
         }
 
         /// <summary>
@@ -4017,7 +4010,7 @@ namespace z80
                 f |= Fl_S;
             if (res == 0) 
                 f |= Fl_Z;
-            if ((a & 0xF + n & 0xF) > 0xF)
+            if((((a & 0x0F) + ( n & 0x0F ) ) & 0x10 ) != 0 ) // 0x10 looks at bit 4!
                 f |= Fl_H;
             if (Parity(res)) 
                 f |= Fl_PV;
@@ -4036,7 +4029,7 @@ namespace z80
                 f |= Fl_S;
             if (res == 0)
                 f |= Fl_Z;
-            if ((a & 0xF + n & 0xF) > 0xF)
+            if((((a & 0x0F) + ( n & 0x0F ) ) & 0x10 ) != 0 ) // 0x10 looks at bit 4!
                 f |= Fl_H;
             if (Parity(res))
                 f |= Fl_PV;
@@ -4055,7 +4048,7 @@ namespace z80
                 f |= Fl_S;
             if (res == 0)
                 f |= Fl_Z;
-            if ((a & 0xF + n & 0xF) > 0xF)
+            if((((a & 0x0F) + ( n & 0x0F ) ) & 0x10 ) != 0 ) // 0x10 looks at bit 4!
                 f |= Fl_H;
             if (Parity(res))
                 f |= Fl_PV;
@@ -4064,20 +4057,20 @@ namespace z80
             registers[A] = res;
         }
 
-        private void Cmp(byte b)
+        private void Cmp(byte n)
         {
             var a    = registers[A];
-            int diff = a - b;
+            int diff = a - n;
             var f    = (byte)(registers[F] & 0x28);
 
             if ((diff & 0x80) > 0)
                 f = (byte)(f | 0x80); // S
             if (diff == 0)
                 f = (byte)(f | 0x40); // Z
-            if ((a & 0xF) < (b & 0xF))
-                f = (byte)(f | 0x10); // H
-            if ((a > 0x80 && b > 0x80 && (sbyte)diff > 0) || 
-                (a < 0x80 && b < 0x80 && (sbyte)diff < 0)    )
+            if((((a & 0x0F) + ( n & 0x0F ) ) & 0x10 ) != 0 ) // 0x10 looks at bit 4!
+                f |= Fl_H;
+            if ((a > 0x80 && n > 0x80 && (sbyte)diff > 0) || 
+                (a < 0x80 && n < 0x80 && (sbyte)diff < 0)    )
                 f = (byte)(f | 0x04); // P/V
 
             f = (byte)(f | 0x02);     // N
@@ -4160,7 +4153,8 @@ namespace z80
             var parity = true;
             while (value > 0)
             {
-                if ((value & 1) == 1) parity = !parity;
+                if ((value & 1) == 1) 
+                    parity = !parity;
                 value = (byte)(value >> 1);
             }
             return parity;
