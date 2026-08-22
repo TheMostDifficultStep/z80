@@ -272,9 +272,29 @@ namespace z80
         /// <param name="bInstr">Either a DD or FD range of instr</param>
         /// <param name="rgSrcMap">DD or FD map for the registers.</param>
         protected void DwAddInstr( byte bInstr, byte[] rgSrcMap ) {
-            var src = (byte)( bInstr       & 0x07);
+            var src = (byte)( bInstr & 0x07);
 
-            registers[A] = Add(registers[rgSrcMap[src]]);
+            if( src == 6 ) {
+                TryInsertMissingInstruction( 0xdd, bInstr );
+                return;
+            }
+
+            Add(registers[rgSrcMap[src]]);
+#if (DEBUG)
+            Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
+#endif
+            Wait(8);
+            return;
+        }
+
+        protected void DwAdcInstr( byte bInstr, byte[] rgSrcMap ) {
+            var src = (byte)( bInstr & 0x07);
+
+            if( src == 6 ) {
+                TryInsertMissingInstruction( 0x01, bInstr );
+                return;
+            }
+            Adc(registers[rgSrcMap[src]]);
 #if (DEBUG)
             Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
 #endif
@@ -284,9 +304,14 @@ namespace z80
 
         /// <see cref="DwAddInstr(byte, byte[])"
         protected void DwSubInstr( byte bInstr, byte[] rgSrcMap ) {
-            var src = (byte)( bInstr       & 0x07);
+            var src = (byte)( bInstr & 0x07);
 
-            registers[A] = Sub(registers[rgSrcMap[src]]);
+            if( src == 6 ) {
+                TryInsertMissingInstruction( 0x01, bInstr );
+                return;
+            }
+
+            Sub(registers[rgSrcMap[src]]);
 #if (DEBUG)
             Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
 #endif
@@ -296,6 +321,11 @@ namespace z80
 
         protected void DwAndInstr( byte bInstr, byte[] rgSrcMap ) {
             var src = (byte)( bInstr & 0x07);
+
+            if( src == 6 ) {
+                TryInsertMissingInstruction( 0x01, bInstr );
+                return;
+            }
 
             And( registers[rgSrcMap[src]] );
 #if (DEBUG)
@@ -308,6 +338,11 @@ namespace z80
         protected void DwOrInstr( byte bInstr, byte[] rgSrcMap ) {
             var src = (byte)( bInstr & 0x07);
 
+            if( src == 6 ) {
+                TryInsertMissingInstruction( 0x01, bInstr );
+                return;
+            }
+
             Or( registers[rgSrcMap[src]] );
 #if (DEBUG)
             Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
@@ -319,7 +354,28 @@ namespace z80
         protected void DwXorInstr( byte bInstr, byte[] rgSrcMap ) {
             var src = (byte)( bInstr & 0x07);
 
+            if( src == 6 ) {
+                TryInsertMissingInstruction( 0x01, bInstr );
+                return;
+            }
+
             Xor( registers[rgSrcMap[src]] );
+#if (DEBUG)
+            Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
+#endif
+            Wait(8);
+            return;
+        }
+
+        protected void DwCmpInstr( byte bInstr, byte[] rgSrcMap ) {
+            var src = (byte)( bInstr & 0x07);
+
+            if( src == 6 ) {
+                TryInsertMissingInstruction( 0x01, bInstr );
+                return;
+            }
+
+            Cmp( registers[rgSrcMap[src]] );
 #if (DEBUG)
             Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
 #endif
@@ -834,7 +890,7 @@ namespace z80
                 case 0x87:
                     {
                         // ADD A, r
-                        registers[A] = Add(registers[lo]);
+                        Add(registers[lo]);
 #if (DEBUG)
                         Log($"ADD A, {RName(lo)}");
 #endif
@@ -845,18 +901,17 @@ namespace z80
                     {
                         // ADD A, n
                         var b = Fetch();
-                        registers[A] = Add(b);
+                        Add(b);
 #if (DEBUG)
                         Log($"ADD A, 0x{b:X2}");
 #endif
-                        Wait(4);
-                        Wait(4);
+                        Wait(7);
                         return;
                     }
                 case 0x86:
                     {
                         // ADD A, (HL)
-                        registers[A] = Add(mem[Hl]);
+                        Add(mem[Hl]);
 #if (DEBUG)
                         Log("ADD A, (HL)");
 #endif
@@ -909,7 +964,7 @@ namespace z80
                 case 0x97:
                     {
                         // SUB A, r
-                        registers[A] = Sub(registers[lo]);
+                        Sub(registers[lo]);
 #if (DEBUG)
                         Log($"SUB A, {RName(lo)}");
 #endif
@@ -920,7 +975,7 @@ namespace z80
                     {
                         // SUB A, n
                         var b = Fetch();
-                        registers[A] = Sub(b);
+                        Sub(b);
 #if (DEBUG)
                         Log($"SUB A, 0x{b:X2}");
 #endif
@@ -930,7 +985,7 @@ namespace z80
                 case 0x96:
                     {
                         // SUB A, (HL)
-                        registers[A] = Sub(mem[Hl]);
+                        Sub(mem[Hl]);
 #if (DEBUG)
                         Log("SUB A, (HL)");
 #endif
@@ -956,10 +1011,10 @@ namespace z80
                 case 0xDE:
                     {
                         // SBC A, n
-                        var b = Fetch();
-                        Sbc(b);
+                        var n = Fetch();
+                        Sbc(n);
 #if (DEBUG)
-                        Log($"SBC A, 0x{b:X2}");
+                        Log($"SBC A, 0x{n:X2}");
 #endif
                         Wait(4);
                         return;
@@ -1032,10 +1087,10 @@ namespace z80
                 case 0xF6:
                     {
                         // OR A, n
-                        var b = Fetch();
-                        Or(b);
+                        var n = Fetch();
+                        Or(n);
 #if (DEBUG)
-                        Log($"OR A, 0x{b:X2}");
+                        Log($"OR A, 0x{n:X2}");
 #endif
                         Wait(4);
                         return;
@@ -1129,10 +1184,10 @@ namespace z80
                 case 0xFE:
                     {
                         // CP A, n
-                        var b = Fetch();
-                        Cmp(b);
+                        var n = Fetch();
+                        Cmp(n);
 #if (DEBUG)
-                        Log($"CP A, 0x{b:X2}");
+                        Log($"CP A, 0x{n:X2}");
 #endif
                         Wait(4);
                         return;
@@ -1205,14 +1260,14 @@ namespace z80
                         // DAA
                         var a = registers[A];
                         var f = registers[F];
-                        if ((a & 0x0F) > 0x09 || (f & (byte)Fl.H) > 0)
+                        if ((a & 0x0F) > 0x09 || (f & Fl_H) > 0)
                         {
-                            registers[A] = Add(0x06);
+                            Add(0x06);
                             a = registers[A];
                         }
-                        if ((a & 0xF0) > 0x90 || (f & (byte)Fl.C) > 0)
+                        if ((a & 0xF0) > 0x90 || (f & Fl_C) > 0)
                         {
-                            registers[A] = Add(0x60);
+                            Add(0x60);
                         }
 #if (DEBUG)
                         Log("DAA");
@@ -3083,7 +3138,7 @@ namespace z80
                         // ADD A, (IX+d)
                         var d = (sbyte)Fetch();
 
-                        registers[A] = Add(mem[(ushort)(Ix + d)]);
+                        Add(mem[(ushort)(Ix + d)]);
 #if (DEBUG)
                         Log($"ADD A, (IX{d:+0;-#})");
 #endif
@@ -3108,7 +3163,7 @@ namespace z80
                         var d = (sbyte)Fetch();
                         var b = mem[(ushort)(Ix + d)];
 
-                        registers[A] = Sub(b);
+                        Sub(b);
 #if (DEBUG)
                         Log($"SUB A, (IX{d:+0;-#})");
 #endif
@@ -3341,7 +3396,7 @@ namespace z80
         }
 
         protected enum OpToken {
-            LD, Add, Sub, And, Or, Xor, Undef
+            LD, Add, Sub, And, Or, Xor, Adc, Cp, Undef
         }
 
         protected class OpRange {
@@ -3366,6 +3421,8 @@ namespace z80
             rgOps.Add( new OpRange( 0xa0, 0xa7, OpToken.And ) );
             rgOps.Add( new OpRange( 0xa8, 0xaf, OpToken.Xor ) );
             rgOps.Add( new OpRange( 0xb0, 0xb7, OpToken.Or  ) );
+            rgOps.Add( new OpRange( 0x88, 0x8f, OpToken.Adc ) );
+            rgOps.Add( new OpRange( 0xb8, 0xbf, OpToken.Cp  ) );
         }
 
         protected OpToken FindToken( List<OpRange> rgOps, byte mc ) {
@@ -3412,6 +3469,12 @@ namespace z80
                             return;
                         case OpToken.Xor:
                             DwXorInstr( mc, _rgIYLd );
+                            return;
+                        case OpToken.Adc:
+                            DwAdcInstr( mc, _rgIYLd );
+                            return;
+                        case OpToken.Cp:
+                            DwCmpInstr( mc, _rgIYLd );
                             return;
                     }
                     TryInsertMissingInstruction( 0xfd, mc );
@@ -3590,7 +3653,7 @@ namespace z80
                         // SUB A, (IY+d)
                         var d = (sbyte)Fetch();
 
-                        registers[A] = Sub(mem[(ushort)(Iy + d)]);
+                        Sub(mem[(ushort)(Iy + d)]);
 #if (DEBUG)
                         Log($"SUB A, (IY{d:+0;-#})");
 #endif
@@ -3815,6 +3878,7 @@ namespace z80
                         Wait(11);
                         return;
                     }
+
             }
 #if (DEBUG)
             Log($"FD {mc:X2}: {lo:X2} {r:X2}");
@@ -3827,7 +3891,7 @@ namespace z80
         /// </summary>
         /// <param name="n">Value to add to the accumulator.</param>
         /// <returns>The resulting value.</returns>
-        private byte Add(byte n)
+        private void Add(byte n)
         {
             var a   = registers[A];
             var sum = a + n;
@@ -3852,8 +3916,7 @@ namespace z80
                 f |= Fl_C;
 
             registers[F] = f;
-
-            return (byte)sum;
+            registers[A] = (byte)sum;
         }
 
         private void Adc(byte n)
@@ -3885,7 +3948,7 @@ namespace z80
         /// if the unsigned value of A is less than the unsigned
         /// value of B then Carry is set.
         /// </summary>
-        private byte Sub(byte n)
+        private void Sub(byte n)
         {
             var a    = registers[A];
             var diff = a - n;
@@ -3908,8 +3971,7 @@ namespace z80
                 f |= Fl_C;
 
             registers[F] = f;
-
-            return (byte)diff;
+            registers[A] = (byte)diff;
         }
 
         private void Sbc(byte n)
