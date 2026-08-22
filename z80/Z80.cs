@@ -2984,8 +2984,14 @@ namespace z80
                         case OpToken.Xor:
                             DwXorInstr( mc, _rgIXLd );
                             return;
+                        case OpToken.Adc:
+                            DwAdcInstr( mc, _rgIXLd );
+                            return;
+                        case OpToken.Cp:
+                            DwCmpInstr( mc, _rgIXLd );
+                            return;
                     }
-                    TryInsertMissingInstruction( 0xfd, mc );
+                    TryInsertMissingInstruction( 0xdd, mc );
                     return;
                 case 0xCB:
                     {
