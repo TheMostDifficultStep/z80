@@ -141,6 +141,58 @@ namespace z80 {
 
         }
 
+        public void RunSbc() {
+            // 1. No Borrow, No Flags (Clean Baseline)
+            Cpu.Flags = 0;
+            Cpu.Hl    = 0x4000;
+            Cpu.SbcHl(  0x1000 );
+            // C=0, H=0, V=0, Z=0, S=0, N=1
+            CmpF( z:false, s:false, h:false, pv:false, n:true, c:false );
+
+            // 2. Underflow to Zero (Exact Match with Carry)
+            Cpu.Flags = Z80.Fl_C;
+            Cpu.Hl    = 0x1001;
+            Cpu.SbcHl(  0x1000 );
+            // C=0, H=0, V=0, Z=1, S=0, N=1
+            CmpF( z:true, s:false, h:false, pv:false, n:true, c:false );
+
+            // 3. Maximum Borrow / Wraparound (0 - 1)
+            Cpu.Flags = 0;
+            Cpu.Hl    = 0x0000;
+            Cpu.SbcHl(  0x0001 );
+            // C=1, H=1, V=0, Z=0, S=1, N=1
+            CmpF( z:false, s:true, h:true, pv:false, n:true, c:true );
+
+            // 4. Half-Carry (H) Boundary
+            Cpu.Flags = 0;
+            Cpu.Hl    = 0x1000;
+            Cpu.SbcHl(  0x0001 );
+            // C=0, H=1, V=0, Z=0, S=0, N=1
+            CmpF( z:false, s:false, h:true, pv:false, n:true, c:false );
+
+            // 5. Signed Overflow (V) - Positive minus Negative
+            Cpu.Flags = 0;
+            Cpu.Hl    = 0x7000;
+            Cpu.SbcHl(  0x9000 );
+            // C=1, H=0, V=1, Z=0, S=1, N=1
+            CmpF( z:false, s:true, h:false, pv:true, n:true, c:true );
+
+            // 6. Signed Overflow (V) - Negative minus Positive
+            Cpu.Flags = 0;
+            Cpu.Hl    = 0x8000;
+            Cpu.SbcHl(  0x0001 );
+            // C=0, H=1, V=1, Z=0, S=0, N=1
+            CmpF( z:false, s:false, h:true, pv:true, n:true, c:false );
+
+            // 7. Subtracting a Register from Itself (With Carry)
+            Cpu.Flags = Z80.Fl_C;
+            Cpu.Hl    = 0x5555;
+            Cpu.SbcHl(  0x5555 );
+            // C=1, H=1, V=0, Z=0, S=1, N=1
+            CmpF( z:false, s:true, h:true, pv:false, n:true, c:true );
+
+        }
+
         static void Main(string[] args)
         {
             Console.WriteLine("Test LD 0x40 -> 0x7f");
@@ -148,6 +200,7 @@ namespace z80 {
             Program oProg = new Program();
             oProg.RunSub();
             oProg.RunAdd();
+            oProg.RunSbc();
         }
     }
 }

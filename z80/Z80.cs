@@ -133,7 +133,11 @@ namespace z80
             get { return registers[A]; }
             set { registers[A] = value; }
         }
-        public byte Flags  => registers[F]; // change to public
+        public byte Flags  { 
+            get { return registers[F]; }
+            set { registers[F] = value; }
+        }
+
         public bool Halt { get; private set; }
 
         void InterruptMode0() {
@@ -1978,64 +1982,75 @@ namespace z80
         private ushort Add(ushort value1, ushort value2)
         {
             var sum = value1 + value2;
-            var f = (byte)(registers[F] & (byte)~(Fl.H | Fl.N | Fl.C));
+            var f = (byte)(registers[F] & ~(Fl_H | Fl_N | Fl_C));
+
             if ((value1 & 0x0FFF) + (value2 & 0x0FFF) > 0x0FFF)
-                f |= (byte)Fl.H;
+                f |= Fl_H;
             if (sum > 0xFFFF)
-                f |= (byte)Fl.C;
+                f |= Fl_C;
+
             registers[F] = f;
             return (ushort)sum;
         }
 
-        private void AdcHl(ushort value)
+        public void AdcHl(ushort value)
         {
-            var sum = Adc(Hl, value);
-            registers[H] = (byte)(sum >> 8);
-            registers[L] = (byte)(sum & 0xFF);
+            Hl = Adc(Hl, value);
         }
 
         private ushort Adc(ushort value1, ushort value2)
         {
-            var sum = value1 + value2 + (registers[F] & (byte)Fl.C);
-            var f = (byte)(registers[F] & (byte)~(Fl.S | Fl.Z | Fl.H | Fl.PV | Fl.N | Fl.C));
-            if ((short)sum < 0)
-                f |= (byte)Fl.S;
-            if (sum == 0)
-                f |= (byte)Fl.Z;
-            if ((value1 & 0x0FFF) + (value2 & 0x0FFF) + (byte)Fl.C > 0x0FFF)
-                f |= (byte)Fl.H;
-            if (sum > 0x7FFF)
-                f |= (byte)Fl.PV;
-            if (sum > 0xFFFF)
-                f |= (byte)Fl.C;
+            uint   raw = (uint)value1 + (uint)value2 + (uint)(registers[F] & Fl_C);
+            ushort sum = (ushort)raw;
+            var    f   = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N ));
+
+            if( ( sum & 0x8000 ) > 0 )
+               f |= Fl_S;
+            if( sum == 0)
+               f |= Fl_Z;
+            if( (value1 & 0x0FFF) + (value2 & 0x0FFF) + (registers[F] & Fl_C) > 0x0FFF)
+               f |= Fl_H;
+ 
+            // Overflow flag (P/V): set if sign of operands is the same but different from result
+            if( (~(value1 ^ value2) & (value1 ^ raw) & 0x8000) != 0 )
+                f |= Fl_PV;
+            if( (raw & 0x10000) != 0)
+                f |= Fl_C;
+
             registers[F] = f;
-            return (ushort)sum;
+            return sum;
         }
 
-        private void SbcHl(ushort value)
+        public void SbcHl(ushort value)
         {
-            var sum = Sbc(Hl, value);
-            registers[H] = (byte)(sum >> 8);
-            registers[L] = (byte)(sum & 0xFF);
+            Hl = Sbc(Hl, value);
         }
 
 
         private ushort Sbc(ushort value1, ushort value2)
         {
-            var diff = value1 - value2 - (registers[F] & (byte)Fl.C);
-            var f = (byte)(registers[F] & (byte)~(Fl.S | Fl.Z | Fl.H | Fl.PV | Fl.N | Fl.C));
-            if ((short)diff < 0)
-                f |= (byte)Fl.S;
-            if (diff == 0)
-                f |= (byte)Fl.Z;
-            if ((value1 & 0xFFF) < (value2 & 0xFFF) + (registers[F] & (byte)Fl.C))
-                f |= (byte)Fl.H;
-            if (diff > short.MaxValue || diff < short.MinValue)
-                f |= (byte)Fl.PV;
-            if ((ushort)diff > value1)
-                f |= (byte)Fl.C;
+            uint   raw  = (uint)value1 - (uint)value2 - (uint)(registers[F] & Fl_C);
+            ushort diff = (ushort)raw;
+            var    f    = (byte)(registers[F] & ~(Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_N | Fl_C));
+
+            if( ( raw & 0x8000 ) > 0 )
+                f |= Fl_S;
+            if( diff == 0)
+                f |= Fl_Z;
+            if( (value1 & 0xFFF) - (value2 & 0xFFF) - (registers[F] & Fl_C) < 0)
+                f |= Fl_H;
+
+            // True if subtracting two different signs results in a change of the destination sign
+            // For HL - ss, overflow occurs if (HL^ss) has bit 15 set AND (HL^result) has bit 15 set
+            if( ((value1 ^ value2)&0x8000) !=0 && ((value1 ^ raw) & 0x8000) != 0 )
+                f |= Fl_PV;
+            if( ( raw & 0x10000 ) > 0 )
+                f |= Fl_C;
+
+            f |= Fl_N;
+
             registers[F] = f;
-            return (ushort)diff;
+            return diff;
         }
 
         private void ParseED()
