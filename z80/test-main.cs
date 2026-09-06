@@ -193,6 +193,51 @@ namespace z80 {
 
         }
 
+        public void RunAdc() {
+            // 1. No-Op (Zero Cases)
+            Cpu.Flags = 0;
+            Cpu.Hl    = 0x0000;
+            Cpu.AdcHl(  0x0000 );
+            CmpF( z:true, s:false, h:false, pv:false, n:false, c:false );
+
+            // 2. Maximum Limits (Wraparound)
+            Cpu.Flags = 0;
+            Cpu.Hl    = 0xFFFF;
+            Cpu.AdcHl(  0x0001 );
+            CmpF( z:true, s:false, h:true, pv:false, n:false, c:true );
+
+            // 3. Half-Carry Boundary
+            Cpu.Flags = 0;
+            Cpu.Hl    = 0x0FFF;
+            Cpu.AdcHl(  0x0001 );
+            CmpF( z:false, s:false, h:true, pv:false, n:false, c:false );
+
+            // 4. Signed Overflow (Positive + Positive = Negative)
+            Cpu.Flags = 0;
+            Cpu.Hl    = 0x7FFF ;
+            Cpu.AdcHl(  0x0001 );
+            CmpF( z:false, s:true, h:true, pv:true, n:false, c:false );
+
+            // 5. Signed Overflow (Negative + Negative = Positive)
+            Cpu.Flags = 0;
+            Cpu.Hl    = 0x8000  ;
+            Cpu.AdcHl(  0xFFFF  );
+            CmpF( z:false, s:false, h:false, pv:true, n:false, c:true );
+
+            // 6. Ripple Carry via Carry Flag
+            Cpu.Flags = Z80.Fl_C;
+            Cpu.Hl    = 0x0FFF;
+            Cpu.AdcHl(  0x0000  );
+            CmpF( z:false, s:false, h:true, pv:false, n:false, c:false );
+
+            // 7. Sign Flag Triggering
+            Cpu.Flags = 0;
+            Cpu.Hl    = 0x4000;
+            Cpu.AdcHl(  0x4000  );
+            CmpF( z:false, s:true, h:false, pv:true, n:false, c:false );
+
+        }
+
         static void Main(string[] args)
         {
             Console.WriteLine("Test LD 0x40 -> 0x7f");
@@ -201,6 +246,7 @@ namespace z80 {
             oProg.RunSub();
             oProg.RunAdd();
             oProg.RunSbc();
+            oProg.RunAdc();
         }
     }
 }

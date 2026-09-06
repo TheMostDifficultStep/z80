@@ -2011,8 +2011,9 @@ namespace z80
             if( (value1 & 0x0FFF) + (value2 & 0x0FFF) + (registers[F] & Fl_C) > 0x0FFF)
                f |= Fl_H;
  
-            // Overflow flag (P/V): set if sign of operands is the same but different from result
-            if( (~(value1 ^ value2) & (value1 ^ raw) & 0x8000) != 0 )
+            // Overflow occurs if the sign of the operands is the same as each other 
+            // but different from the sign of the result.
+            if( ((value1 ^ raw) & (value2 ^ raw) & 0x8000) != 0 )
                 f |= Fl_PV;
             if( (raw & 0x10000) != 0)
                 f |= Fl_C;
