@@ -95,7 +95,7 @@ namespace z80 {
 
             Cpu.registers[Z80.A] = 0x80;
             Cpu.Add( 0xff ); // z=0, s=0, h=0(s/b 1), pv=1, n=0, c=1
-            CmpF( z:false, s:false, h:true, pv:true, n:false, c:true );
+            CmpF( z:false, s:false, h:false, pv:true, n:false, c:true );
 
             Cpu.registers[Z80.A] = 0x0f;
             Cpu.Add( 0x01 ); // z=0, s=0, h=1, pv=0, n=0, c=0
@@ -125,7 +125,7 @@ namespace z80 {
 
             Cpu.registers[Z80.A] = 0x7f;
             Cpu.Sub( 0x81 ); 
-            CmpF( z:false, s:true, h:true, pv:true, n:true, c:true );
+            CmpF( z:false, s:true, h:false, pv:true, n:true, c:true );
 
             Cpu.registers[Z80.A] = 0x80;
             Cpu.Sub( 0x01 ); 
@@ -147,6 +147,7 @@ namespace z80 {
 
             Program oProg = new Program();
             oProg.RunSub();
+            oProg.RunAdd();
         }
     }
 }

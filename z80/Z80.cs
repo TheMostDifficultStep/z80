@@ -3899,44 +3899,43 @@ namespace z80
         /// <returns>The resulting value.</returns>
         public void Add(byte n)
         {
-            var a   = registers[A];
-            var sum = a + n;
-
-            //registers[A] = (byte)sum;
+            var  a   = registers[A];
+            int  raw = a + n;
+            byte sum = (byte)raw;
 
             var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N ));
-            if((sum & 0x80) > 0)
+            if( (sum & 0x80) > 0)
                 f |= Fl_S;
-            if((byte)sum == 0)
+            if( sum == 0)
                 f |= Fl_Z;
-            if((((a & 0x0F) + ( n & 0x0F ) ) & 0x10 ) != 0 ) // 0x10 looks at bit 4!
-                f |= Fl_H;
-            if(((a ^ sum ) & ( n ^ sum ) & 0x80 ) != 0 )
+            if( ((a ^ n ^ sum ) & 0x10) != 0 )
+               f |= Fl_H;
+            if( ((a ^ sum ) & ( n ^ sum ) & 0x80 ) != 0 )
                 f |= Fl_PV;
-            if(sum > 0xFF)
+            if( raw > 0xFF)
                 f |= Fl_C;
 
             registers[F] = f;
-            registers[A] = (byte)sum;
+            registers[A] = sum;
         }
 
         private void Adc(byte n)
         {
-            var a   = registers[A];
-            var c   = ((registers[F] & Fl_C) > 0 ) ? 1 : 0;
-            var sum = a + n + c;
+            byte a   = registers[A];
+            int  c   = ((registers[F] & Fl_C) > 0 ) ? 1 : 0;
+            int  sum = a + n + c;
 
             var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N ));
 
-            if ((sum & 0x80) > 0)
+            if( (sum & 0x80) > 0)
                 f |= Fl_S;
-            if ((byte)sum == 0)
+            if( (byte)sum == 0)
                 f |= Fl_Z;
-            if((((a & 0x0F) + ( n+c & 0x0F ) ) & 0x10 ) != 0 ) // 0x10 looks at bit 4!
-                f |= Fl_H;
-            if(((a ^ sum ) & ( n+c ^ sum ) & 0x80 ) != 0 )
+            if( ((a ^ n ^ c ^ sum ) & 0x10) != 0 )
+               f |= Fl_H;
+            if( ((a ^ sum ) & ( n+c ^ sum ) & 0x80 ) != 0 )
                 f |= Fl_PV;
-            if (sum > 0xFF) 
+            if( sum > 0xFF) 
                 f |= Fl_C;
 
             registers[F] = f;
@@ -3949,27 +3948,7 @@ namespace z80
         /// </summary>
         public void Sub(byte n)
         {
-            var a    = registers[A];
-            var diff = a - n;
-
-            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C ));
-
-            if ((diff & 0x80) > 0)
-                f |= Fl_S;
-            if (diff == 0)
-                f |= Fl_Z;
-            if ((((a & 0x0F) - (n & 0x0F)) & 0x10) != 0 )
-                f |= Fl_H;
-            if (((a ^ n) & (a ^ diff) & 0x80) != 0)
-                f |= Fl_PV;
-
-            f |= Fl_N; 
-
-            if (diff < 0)
-                f |= Fl_C;
-
-            registers[F] = f;
-            registers[A] = (byte)diff;
+            registers[A] = Cmp( n );
         }
 
         private void Sbc(byte n)
@@ -3984,8 +3963,8 @@ namespace z80
                 f |= Fl_S;
             if (diff == 0) 
                 f |= Fl_Z;
-            if ((((a & 0x0F) - ((n-c) & 0x0F)) & 0x10) != 0 )
-                f |= Fl_H;
+            if( ((a ^ n ^ c ^ diff ) & 0x10) != 0 )
+               f |= Fl_H;
             if (((a ^ (n-c)) & (a ^ diff) & 0x80) != 0)
                 f |= Fl_PV;
             f |= Fl_N;
@@ -4007,8 +3986,6 @@ namespace z80
                 f |= Fl_S;
             if (res == 0) 
                 f |= Fl_Z;
-            if((((a & 0x0F) + ( n & 0x0F ) ) & 0x10 ) != 0 ) // 0x10 looks at bit 4!
-                f |= Fl_H;
             if (Parity(res)) 
                 f |= Fl_PV;
 
@@ -4026,9 +4003,7 @@ namespace z80
                 f |= Fl_S;
             if (res == 0)
                 f |= Fl_Z;
-            if((((a & 0x0F) + ( n & 0x0F ) ) & 0x10 ) != 0 ) // 0x10 looks at bit 4!
-                f |= Fl_H;
-            if (Parity(res))
+            if (Parity(res)) 
                 f |= Fl_PV;
 
             registers[F] = f;
@@ -4045,36 +4020,42 @@ namespace z80
                 f |= Fl_S;
             if (res == 0)
                 f |= Fl_Z;
-            if((((a & 0x0F) + ( n & 0x0F ) ) & 0x10 ) != 0 ) // 0x10 looks at bit 4!
-                f |= Fl_H;
-            if (Parity(res))
+            if (Parity(res)) 
                 f |= Fl_PV;
 
             registers[F] = f;
             registers[A] = res;
         }
 
-        private void Cmp(byte n)
+        /// <summary>
+        /// Basically Sub without the acc assignment.
+        /// </summary>
+        /// <see cref="Sub(byte)"
+        private byte Cmp(byte n)
         {
-            var a    = registers[A];
-            int diff = a - n;
-            var f    = (byte)(registers[F] & 0x28);
+            byte a    = registers[A];
+            int  raw  = a - n;
+            byte diff = (byte)raw;
 
-            if ((diff & 0x80) > 0)
-                f = (byte)(f | 0x80); // S
-            if (diff == 0)
-                f = (byte)(f | 0x40); // Z
-            if((((a & 0x0F) + ( n & 0x0F ) ) & 0x10 ) != 0 ) // 0x10 looks at bit 4!
-                f |= Fl_H;
-            if ((a > 0x80 && n > 0x80 && (sbyte)diff > 0) || 
-                (a < 0x80 && n < 0x80 && (sbyte)diff < 0)    )
-                f = (byte)(f | 0x04); // P/V
+            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C ));
 
-            f = (byte)(f | 0x02);     // N
+            if( (diff & 0x80) > 0)
+               f |= Fl_S;
+            if( diff == 0)
+               f |= Fl_Z;
+            if( ((a ^ n ^ diff ) & 0x10) != 0 )
+               f |= Fl_H;
+            if( ((a ^ n) & (a ^ diff) & 0x80) != 0)
+                f |= Fl_PV;
 
-            if (diff < 0)             // was diff > 0xFF
-                f = (byte)(f | 0x01); // CF
+            f |= Fl_N; 
+
+            if (raw < 0)
+                f |= Fl_C;
+
             registers[F] = f;
+
+            return (byte)diff;
         }
 
         /// <summary>
@@ -4316,9 +4297,9 @@ namespace z80
         [Conditional("DEBUG")]private static void Log(string text)
         {
             //Console.CursorLeft = 20;
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine(text);
-            Console.ForegroundColor = ConsoleColor.White;
+            //Console.ForegroundColor = ConsoleColor.Cyan;
+            //Console.WriteLine(text);
+            //Console.ForegroundColor = ConsoleColor.White;
 
             iOutputCount = 0;
         }
