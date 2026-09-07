@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using static z80.Z80;
 
 // ReSharper disable InconsistentNaming
 
@@ -104,8 +105,8 @@ namespace z80
         /// </summary>
         /// <param name="bReg">The HIGH register, LOW will be +1</param>
         void SetRegisterPair( byte bReg, ushort uVal ) {
-            registers[bReg    ] = (byte)(uVal >> 8); // High
-            registers[bReg + 1] = (byte)(uVal);      // Lo
+            registers[bReg    ] = (byte)(uVal >> 8);    // High
+            registers[bReg + 1] = (byte)(uVal & 0xff ); // Lo
         }
 
         public ushort Hl {
@@ -121,7 +122,12 @@ namespace z80
         }
         public ushort Ix => (ushort)(registers[IXL] + (registers[IX] << 8));
         public ushort Iy => (ushort)(registers[IYL] + (registers[IY] << 8));
-        public ushort Bc => (ushort)((registers[B] << 8) + registers[C]);
+        public ushort Bc {
+            get { return (ushort)((registers[B] << 8) + registers[C]); }
+            set {
+                SetRegisterPair( B, value );
+            }
+        }
         public ushort De => (ushort)((registers[D] << 8) + registers[E]);
         public ushort Pc {
             get { return (ushort)(registers[PC + 1] + (registers[PC] << 8)); }
@@ -2054,6 +2060,97 @@ namespace z80
             return diff;
         }
 
+        public enum DIR {
+            Inc,
+            Dec
+        }
+
+        /// <seealso cref="Cmp(byte)"
+        public void CPx( DIR eDir ) {
+            var  bc   = Bc;
+            var  hl   = Hl;
+            byte a    = registers[A];
+            byte b    = mem[hl];
+            byte diff = (byte)(a - b);
+
+            if( eDir == DIR.Inc )
+                hl++;
+            else
+                hl--;
+            bc--;
+
+            Bc = bc;
+            Hl = hl;
+
+            byte f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV ));
+
+            if( (diff & 0x80) > 0)
+                f |= Fl_S;
+            if( a == b) 
+                f |= Fl_Z;
+            if( ((a ^ b ^ diff ) & 0x10) != 0 )
+                f |= Fl_H;
+            if( bc != 0) 
+               f |= Fl_PV;
+
+            f |= Fl_N;
+
+            registers[F] = f;
+#if (DEBUG)
+            if( eDir != DIR.Inc )
+                Log( "CPI" );
+            else
+                Log( "CPD" );
+#endif
+            Wait(16);
+            return;
+        }
+
+        public void CPxR( DIR eDir ) {
+            var  bc   = Bc;
+            var  hl   = Hl;
+            byte a    = registers[A];
+            byte b    = mem[hl];
+            byte diff = (byte)(a - b);
+
+            if( eDir == DIR.Inc )
+                hl++;
+            else
+                hl--;
+            bc--;
+
+            Bc = bc;
+            Hl = hl;
+
+            if (a == b || bc == 0) {
+                byte f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV ));
+
+                if( (diff & 0x80) > 0)
+                    f |= Fl_S;
+                if( a == b) 
+                    f |= Fl_Z;
+                if( ((a ^ b ^ diff ) & 0x10) != 0 )
+                    f |= Fl_H;
+                if( bc != 0) 
+                    f |= Fl_PV;
+
+                f |= Fl_N;
+
+                registers[F] = f;
+#if (DEBUG)
+                if( eDir != DIR.Inc )
+                    Log( "CPIR" );
+                else
+                    Log( "CPDR" );
+#endif
+                Wait(21);
+                return;
+            }
+            Pc-=2;
+            Wait(21);
+            return;
+        }
+
         private void ParseED()
         {
             if (Halt) return;
@@ -2377,142 +2474,21 @@ namespace z80
                     }
 
                 case 0xA1:
-                    {
-                        // CPI
-                        var bc = Bc;
-                        var hl = Hl;
-
-                        var a = registers[A];
-                        var b = mem[hl];
-                        hl++;
-                        bc--;
-
-                        registers[B] = (byte)(bc >> 8);
-                        registers[C] = (byte)(bc & 0xFF);
-                        registers[H] = (byte)(hl >> 8);
-                        registers[L] = (byte)(hl & 0xFF);
-
-                        var f = (byte)(registers[F] & 0x2A);
-                        if (a < b) f = (byte)(f | 0x80);
-                        if (a == b) f = (byte)(f | 0x40);
-                        if ((a & 8) < (b & 8)) f = (byte)(f | 0x10);
-                        if (bc != 0) f = (byte)(f | 0x04);
-                        registers[F] = (byte)(f | 0x02);
-#if (DEBUG)
-                        Log("CPI");
-#endif
-                        Wait(16);
-                        return;
-                    }
+                    CPx( DIR.Inc ); // CPI
+                    return;
 
                 case 0xB1:
-                    {
-                        // CPIR
-                        var bc = Bc;
-                        var hl = Hl;
-
-                        var a = registers[A];
-                        var b = mem[hl];
-                        hl++;
-                        bc--;
-
-                        registers[B] = (byte)(bc >> 8);
-                        registers[C] = (byte)(bc & 0xFF);
-                        registers[H] = (byte)(hl >> 8);
-                        registers[L] = (byte)(hl & 0xFF);
-
-                        if (a == b || bc == 0)
-                        {
-                            var f = (byte)(registers[F] & 0x2A);
-                            if (a < b) f = (byte)(f | 0x80);
-                            if (a == b) f = (byte)(f | 0x40);
-                            if ((a & 8) < (b & 8)) f = (byte)(f | 0x10);
-                            if (bc != 0) f = (byte)(f | 0x04);
-                            registers[F] = (byte)(f | 0x02);
-#if (DEBUG)
-                            Log("CPIR");
-#endif
-                            Wait(16);
-                            return;
-                        }
-
-                        var pc = (ushort)((registers[PC] << 8) + registers[PC + 1]);
-                        // jumps back to itself
-                        pc -= 2;
-                        registers[PC] = (byte)(pc >> 8);
-                        registers[PC + 1] = (byte)(pc & 0xFF);
-                        Wait(21);
-                        return;
-                    }
+                    CPxR( DIR.Inc ); // CPIR
+                    return;
 
                 case 0xA9:
-                    {
-                        // CPD
-                        var bc = Bc;
-                        var hl = Hl;
-
-                        var a = registers[A];
-                        var b = mem[hl];
-                        hl--;
-                        bc--;
-
-                        registers[B] = (byte)(bc >> 8);
-                        registers[C] = (byte)(bc & 0xFF);
-                        registers[H] = (byte)(hl >> 8);
-                        registers[L] = (byte)(hl & 0xFF);
-
-                        var f = (byte)(registers[F] & 0x2A);
-                        if (a < b) f = (byte)(f | 0x80);
-                        if (a == b) f = (byte)(f | 0x40);
-                        if ((a & 8) < (b & 8)) f = (byte)(f | 0x10);
-                        if (bc != 0) f = (byte)(f | 0x04);
-                        registers[F] = (byte)(f | 0x02);
-#if (DEBUG)
-                        Log("CPD");
-#endif
-                        Wait(16);
-                        return;
-                    }
+                    CPx( DIR.Dec ); // CPD
+                    return;
 
                 case 0xB9:
-                    {
-                        // CPDR
-                        var bc = Bc;
-                        var hl = Hl;
+                    CPxR( DIR.Dec ); // CPDR
+                    return;
 
-                        var a = registers[A];
-                        var b = mem[hl];
-                        hl--;
-                        bc--;
-
-                        registers[B] = (byte)(bc >> 8);
-                        registers[C] = (byte)(bc & 0xFF);
-                        registers[H] = (byte)(hl >> 8);
-                        registers[L] = (byte)(hl & 0xFF);
-
-                        if (a == b || bc == 0)
-                        {
-                            var f = (byte)(registers[F] & 0x2A);
-                            if (a < b) f = (byte)(f | 0x80);
-                            if (a == b) f = (byte)(f | 0x40);
-                            if ((a & 8) < (b & 8)) f = (byte)(f | 0x10);
-                            if (bc != 0) f = (byte)(f | 0x04);
-                            registers[F] = (byte)(f | 0x02);
-#if (DEBUG)
-                            Log("CPDR");
-#endif
-                            Wait(21);
-                            return;
-                        }
-
-                        var pc = (ushort)((registers[PC] << 8) + registers[PC + 1]);
-                        // jumps back to itself
-                        pc -= 2;
-                        registers[PC] = (byte)(pc >> 8);
-                        registers[PC + 1] = (byte)(pc & 0xFF);
-                        Wait(21);
-                        return;
-                    }
                 case 0x44:
                 case 0x54:
                 case 0x64:
@@ -4062,7 +4038,7 @@ namespace z80
             if( ((a ^ n ^ diff ) & 0x10) != 0 )
                f |= Fl_H;
             if( ((a ^ n) & (a ^ diff) & 0x80) != 0)
-                f |= Fl_PV;
+               f |= Fl_PV;
 
             f |= Fl_N; 
 
