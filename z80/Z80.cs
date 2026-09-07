@@ -64,8 +64,8 @@ namespace z80
         /// </summary>
         /// <param name="bFlag">The bits we are interested in.</param>
         /// <returns>true if any of the specified bit(s) are set.</returns>
-        public int GetFlag( byte bFlag ) {
-            return ( registers[F] & bFlag ) > 0 ? 0 : 1;
+        public bool GetFlag( byte bFlag ) {
+            return ( registers[F] & bFlag ) <= 0;
         }
 
         public IPorts                 Ports { get; set; }
@@ -431,6 +431,65 @@ namespace z80
             registers[PC + 1] = mem[stack++];
             registers[PC    ] = mem[stack++];
             Sp = stack;
+        }
+
+        void Daa()
+        {
+            int  t = 0; // Temp
+            byte a = registers[A];
+            byte f = (byte)(registers[F] & ~( Fl_C | Fl_S | Fl_Z | Fl_H | Fl_PV ) );
+    
+            if( GetFlag( Fl_H ) || ((a & 0xF) > 9) ) {
+                t++;
+            }
+    
+            if( GetFlag( Fl_C ) || (a > 0x99) ) {
+                t += 2;
+                f |= Fl_C;
+            }
+    
+            // builds final H flag
+            if( GetFlag( Fl_N ) && !GetFlag( Fl_H )) {
+                f |= Fl_H;
+            } else {
+                if( GetFlag( Fl_N ) && GetFlag( Fl_H )) {
+                    if( (a & 0x0F) < 6 )
+                        f |= Fl_H;
+                } else {
+                    if( (a & 0x0F) >= 0x0A )
+                        f |= Fl_H;
+                }
+            }
+    
+            switch( t ) {
+                case 1:
+                    a += (byte)(GetFlag( Fl_N) ? 0xFA:0x06 ); // -6:6
+                    break;              
+                case 2:                 
+                    a += (byte)(GetFlag( Fl_N) ? 0xA0:0x60 ); // -0x60:0x60
+                    break;              
+                case 3:                 
+                    a += (byte)(GetFlag( Fl_N) ? 0x9A:0x66 ); // -0x66:0x66
+                    break;
+            }
+    
+            if( ( a & 0x80 ) > 0 )
+                f |= Fl_S;
+            if( a == 0 )
+                f |= Fl_Z;
+            if( Parity(a) )
+                f |= Fl_PV;
+
+          //flags.X = a & BIT_5;
+          //flags.Y = a & BIT_3;
+
+            registers[A] = a;
+            registers[F] = f;
+           
+#if (DEBUG)
+            Log("DAA");
+#endif
+            Wait(4); // 4 T states
         }
 
         public void Parse()
@@ -1266,30 +1325,13 @@ namespace z80
                         return;
                     }
                 case 0x27:
-                    {
-                        // DAA
-                        var a = registers[A];
-                        var f = registers[F];
-                        if ((a & 0x0F) > 0x09 || (f & Fl_H) > 0)
-                        {
-                            Add(0x06);
-                            a = registers[A];
-                        }
-                        if ((a & 0xF0) > 0x90 || (f & Fl_C) > 0)
-                        {
-                            Add(0x60);
-                        }
-#if (DEBUG)
-                        Log("DAA");
-#endif
-                        Wait(4);
-                        return;
-                    }
+                    Daa();
+                    return;
                 case 0x2F:
                     {
                         // CPL
                         registers[A] ^= 0xFF;
-                        registers[F] |= (byte)(Fl.H | Fl.N);
+                        registers[F] |= Fl_H | Fl_N;
 #if (DEBUG)
                         Log("CPL");
 #endif
@@ -1298,9 +1340,19 @@ namespace z80
                     }
                 case 0x3F:
                     {
-                        // CCF
-                        registers[F] &= (byte)~(Fl.N);
-                        registers[F] ^= (byte)(Fl.C);
+                        // CCF (complement carry flag)
+                        //C (Carry): Inverted (set to 1 if it was 0, reset to 0 if it was 1).
+                        //H (Half-Carry): Previous carry flag value is copied into H.
+                        //N (Add/Subtract): Reset (cleared to 0).
+                        //S, Z, P/V (Sign, Zero, Parity/Overflow): Not affected.  (http://www.z80.info/z80syntx.htm)
+
+                        byte f = (byte)(registers[F] & ~( Fl_N | Fl_C | Fl_H ));
+                        if( GetFlag( Fl_C ) ) {
+                            f |= Fl_H;
+                        } else {
+                            f |= Fl_C;
+                        }
+                        registers[F] = f;
 #if (DEBUG)
                         Log("CCF");
 #endif
@@ -1310,8 +1362,8 @@ namespace z80
                 case 0x37:
                     {
                         // SCF
-                        registers[F] &= (byte)~(Fl.N);
-                        registers[F] |= (byte)(Fl.C);
+                        registers[F] = (byte)(registers[F] & ~( Fl_N | Fl_H ));
+                        registers[F] |= Fl_C;
 #if (DEBUG)
                         Log("SCF");
 #endif
@@ -4121,10 +4173,10 @@ namespace z80
         private static bool Parity(ushort value)
         {
             var parity = true;
-            while (value > 0)
-            {
+            while (value > 0) {
                 if ((value & 1) == 1) 
                     parity = !parity;
+
                 value = (byte)(value >> 1);
             }
             return parity;
