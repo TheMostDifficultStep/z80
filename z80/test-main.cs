@@ -1,11 +1,10 @@
 ﻿using System;
-using System.Net.NetworkInformation;
 
 namespace z80 {
     public class TestPorts : IPorts {
         public string Name => throw new NotImplementedException();
 
-        public bool NMI => throw new NotImplementedException();
+        public bool NMI => false;
 
         public bool MI => throw new NotImplementedException();
 
@@ -285,9 +284,47 @@ namespace z80 {
             CmpF( z:false, s:true, h:true, pv:false, n:false, c:false );
         }
 
+        public void RunCpl() {
+            // Test Case 1: All Bits Zero (0x00)
+            Memory[0] = 0x2F; // Cpl
+            Cpu.Flags = 0;
+            Cpu.Ac    = 0x0;
+            Cpu.Parse();
+            CmpF( z:false, s:false, h:true, pv:false, n:true, c:false );
+
+            // Test Case 2: All Bits One (0xFF)
+            Cpu.Pc    = 0;
+            Cpu.Flags = 0;
+            Cpu.Ac    = 0xFF;
+            Cpu.Parse();
+            CmpF( z:false, s:false, h:true, pv:false, n:true, c:false );
+
+            // Test Case 3: Flag Preservation (All Flags Set)
+            Cpu.Pc    = 0;
+            Cpu.Flags = Z80.Fl_Z | Z80.Fl_C | Z80.Fl_S | Z80.Fl_PV;
+            Cpu.Ac    = 0x55;
+            Cpu.Parse();
+            CmpF( z:true, s:true, h:true, pv:true, n:true, c:true );
+
+            // Test Case 4: Flag Preservation (All Flags Cleared)
+            Cpu.Pc    = 0;
+            Cpu.Flags = Z80.Fl_Z | Z80.Fl_C | Z80.Fl_S | Z80.Fl_PV;
+            Cpu.Ac    = 0x55;
+            Cpu.Parse();
+            CmpF( z:true, s:true, h:true, pv:true, n:true, c:true );
+
+            // Test Case 5: Alternating Bit Patterns (Nibble Swap Check)
+            Cpu.Pc    = 0;
+            Cpu.Flags = Z80.Fl_Z | Z80.Fl_C | Z80.Fl_S | Z80.Fl_PV;
+            Cpu.Ac    = 0x0f;
+            Cpu.Parse();
+            CmpF( z:true, s:true, h:true, pv:true, n:true, c:true );
+
+        }
+
         static void Main(string[] args)
         {
-            Console.WriteLine("Test LD 0x40 -> 0x7f");
+            Console.WriteLine("Run a bunch of CPU tests.");
 
             Program oProg = new Program();
             oProg.RunSub();
@@ -296,6 +333,7 @@ namespace z80 {
             oProg.RunAdc16();
 
             oProg.RunDaa();
+            oProg.RunCpl();
         }
     }
 }
