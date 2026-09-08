@@ -3998,7 +3998,7 @@ namespace z80
             Ac    = sum;
         }
 
-        private void Adc(byte n)
+        public void Adc(byte n)
         {
             byte a   = registers[A];
             int  c   = ((registers[F] & Fl_C) > 0 ) ? 1 : 0;
@@ -4034,7 +4034,54 @@ namespace z80
             registers[A] = Cmp( n );
         }
 
-        private void Sbc(byte n)
+        public void Sbc(byte n)
+        {
+            var a    = registers[A];
+            var c    = ((registers[F] & Fl_C) > 0) ? 1 : 0;
+    
+            // Perform the full math in standard integer space
+            var diff = a - n - c;
+    
+            // Safely cast to an 8-bit result right away for register storage and flag checks
+            byte result = (byte)diff;
+
+            // Clear existing flags (keeping any unmentioned flags like unused bits if they exist)
+            var f = (byte)(registers[F] & ~(Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_X | Fl_Y));
+
+            // Sign flag tracks bit 7 of the actual 8-bit result
+            if ((result & 0x80) != 0) 
+                f |= Fl_S;
+        
+            // Zero flag checks the 8-bit wrapped result
+            if (result == 0) 
+                f |= Fl_Z;
+        
+            // Half-Carry tracks borrows across bit 4 boundary
+            if (((a ^ n ^ diff) & 0x10) != 0)
+               f |= Fl_H;
+       
+            // Overflow tracks signed boundary crossings (Pos - Neg = Neg, or Neg - Pos = Pos)
+            if (((a ^ n) & (a ^ diff) & 0x80) != 0)
+                f |= Fl_PV;
+        
+            // SBC is a subtraction instruction
+            f |= Fl_N;
+
+            // Carry triggers if the absolute subtraction drops below 0 unsigned
+            if (diff < 0) 
+                f |= Fl_C;
+
+            // Save back to accumulator
+            registers[A] = result; 
+
+            // Undocumented bits 3 (Fl_X) and 5 (Fl_Y) copy directly from the result
+            if ((result & Fl_X) != 0) f |= Fl_X; 
+            if ((result & Fl_Y) != 0) f |= Fl_Y;
+
+            registers[F] = f;
+        }
+
+        public void Sbc2(byte n)
         {
             var a    = registers[A];
             var c    = ((registers[F] & Fl_C) > 0 ) ? 1 : 0;

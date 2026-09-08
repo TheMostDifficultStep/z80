@@ -325,35 +325,40 @@ namespace z80 {
 
         public void RunAdcSbc() {
             // 3. Maximum Bound and Double Carry
-            Cpu.Pc    = 0;
-            Memory[0] = 0xCE; // Adc
-            Memory[1] = 0xff;
             Cpu.Flags = Z80.Fl_C;
             Cpu.Ac    = 0xFF;
-            Cpu.Parse();
+            Cpu.Adc( 0xff );
             CmpF( z:false, s:true, h:true, pv:false, n:false, c:true );
 
             // 4. Half-Carry (H) and Signed Overflow (V) Disagreements
-            Cpu.Pc    = 0;
-            Memory[0] = 0xCE; // Adc
-            Memory[1] = 0x10;
             Cpu.Flags = 0;
             Cpu.Ac    = 0x70;
-            Cpu.Parse();
+            Cpu.Adc( 0x10 );
             CmpF( z:false, s:true, h:false, pv:true, n:false, c:false );
 
             // Self-Subtraction SBC A, A : carry clear
             Cpu.Flags = 0;
             Cpu.Ac    = 0x70;
             Cpu.Sbc( 0x70 );
-            CmpF( z:true, s:false, h:false, pv:true, n:false, c:false );
+            CmpF( z:true, s:false, h:false, pv:false, n:true, c:false );
 
             // Self-Subtraction SBC A, A : carry set
-            Cpu.Flags = z80.Fl_C;
+            Cpu.Flags = Z80.Fl_C;
             Cpu.Ac    = 0x70;
             Cpu.Sbc( 0x70 );
-            CmpF( z:false, s:true, h:false, pv:false, n:false, c:true );
+            CmpF( z:false, s:true, h:true, pv:false, n:true, c:true );
 
+            // 3.  Positive minus Negative (Result wraps to Negative)
+            Cpu.Flags = 0;
+            Cpu.Ac    = 0x7f;
+            Cpu.Sbc( 0xFF ); // -1 
+            CmpF( z:false, s:true, h:true, pv:true, n:true, c:true );
+
+            // 3. Negative minus Positive (Result wraps to Positive)
+            Cpu.Flags = 0;
+            Cpu.Ac    = 0x80;
+            Cpu.Sbc( 0x01 ); 
+            CmpF( z:false, s:false, h:true, pv:true, n:true, c:false );
         }
 
         static void Main(string[] args)
