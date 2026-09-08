@@ -141,7 +141,7 @@ namespace z80 {
 
         }
 
-        public void RunSbc() {
+        public void RunSbc16() {
             // 1. No Borrow, No Flags (Clean Baseline)
             Cpu.Flags = 0;
             Cpu.Hl    = 0x4000;
@@ -193,7 +193,7 @@ namespace z80 {
 
         }
 
-        public void RunAdc() {
+        public void RunAdc16() {
             // 1. No-Op (Zero Cases)
             Cpu.Flags = 0;
             Cpu.Hl    = 0x0000;
@@ -238,6 +238,53 @@ namespace z80 {
 
         }
 
+        public void RunDaa() {
+            // 1. No-Op (Zero Cases)
+            Cpu.Flags = 0;
+            Cpu.Ac    = 0x99;
+            Cpu.Add( 0x01 );
+            CmpF( z:false, s:true, h:false, pv:false, n:false, c:false );
+
+            Cpu.Daa();
+            CmpF( z:true, s:false, h:true, pv:true, n:false, c:true );
+
+            // 2. The Illegal Nibble Trap: $0B + $00
+            Cpu.Flags = 0;
+            Cpu.Ac    = 0xB;
+            Cpu.Add( 0x00 );
+            CmpF( z:false, s:false, h:false, pv:false, n:false, c:false );
+
+            Cpu.Daa();
+            CmpF( z:false, s:false, h:true, pv:true, n:false, c:false );
+
+            // 3. Subtraction Borrow Rollunder: $00 - $01
+            Cpu.Flags = 0;
+            Cpu.Ac    = 0x0;
+            Cpu.Sub( 0x01 );
+            CmpF( z:false, s:true, h:true, pv:false, n:true, c:true );
+
+            Cpu.Daa();
+            CmpF( z:false, s:true, h:false, pv:true, n:true, c:true );
+
+            // 4. The Half-Carry Phantom: $0A - $01
+            Cpu.Flags = 0;
+            Cpu.Ac    = 0x0A;
+            Cpu.Sub( 0x01 );
+            CmpF( z:false, s:false, h:false, pv:false, n:true, c:false );
+
+            Cpu.Daa();
+            CmpF( z:false, s:false, h:false, pv:true, n:true, c:false );
+
+            // 5. Hidden Overflow: $7A + $00
+            Cpu.Flags = 0;
+            Cpu.Ac    = 0x7A;
+            Cpu.Add( 0x00 );
+            CmpF( z:false, s:false, h:false, pv:false, n:false, c:false );
+
+            Cpu.Daa();
+            CmpF( z:false, s:true, h:true, pv:false, n:false, c:false );
+        }
+
         static void Main(string[] args)
         {
             Console.WriteLine("Test LD 0x40 -> 0x7f");
@@ -245,8 +292,10 @@ namespace z80 {
             Program oProg = new Program();
             oProg.RunSub();
             oProg.RunAdd();
-            oProg.RunSbc();
-            oProg.RunAdc();
+            oProg.RunSbc16();
+            oProg.RunAdc16();
+
+            oProg.RunDaa();
         }
     }
 }

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO.Ports;
+using System.Security.Cryptography;
 using static z80.Z80;
 
 // ReSharper disable InconsistentNaming
@@ -65,7 +67,7 @@ namespace z80
         /// <param name="bFlag">The bits we are interested in.</param>
         /// <returns>true if any of the specified bit(s) are set.</returns>
         public bool GetFlag( byte bFlag ) {
-            return ( registers[F] & bFlag ) <= 0;
+            return ( registers[F] & bFlag ) != 0;
         }
 
         public IPorts                 Ports { get; set; }
@@ -433,59 +435,65 @@ namespace z80
             Sp = stack;
         }
 
-        void Daa()
+        public void Daa()
         {
-            int  t = 0; // Temp
-            byte a = registers[A];
-            byte f = (byte)(registers[F] & ~( Fl_C | Fl_S | Fl_Z | Fl_H | Fl_PV ) );
-    
-            if( GetFlag( Fl_H ) || ((a & 0xF) > 9) ) {
-                t++;
-            }
-    
-            if( GetFlag( Fl_C ) || (a > 0x99) ) {
-                t += 2;
-                f |= Fl_C;
-            }
-    
-            // builds final H flag
-            if( GetFlag( Fl_N ) && !GetFlag( Fl_H )) {
-                f |= Fl_H;
+            byte correction = 0x00;
+            bool newCarry   = GetFlag( Fl_C );
+
+            byte upperNibble = (byte)(Ac >> 4);
+            byte lowerNibble = (byte)(Ac & 0x0F);
+
+            if( GetFlag( Fl_N) ) {
+                // --- AFTER A SUBTRACTION OPERATION (N = 1) ---
+                if( GetFlag( Fl_C )) {
+                    correction |= 0x60;
+                }
+                if( GetFlag( Fl_H )) {
+                    correction |= 0x06;
+                }
+
+                // In subtraction, corrections are subtracted rather than added
+                // We can represent this by taking the two's complement of the correction
+                correction = (byte)(-(sbyte)correction);
             } else {
+                // --- AFTER AN ADDITION OPERATION (N = 0) ---
+                if( GetFlag( Fl_C ) || upperNibble > 9 || (upperNibble == 9 && lowerNibble > 9)) {
+                    correction |= 0x60;
+                    newCarry = true;
+                } 
+                if( GetFlag( Fl_H ) || lowerNibble > 9) {
+                    correction |= 0x06;
+                }
+            }
+
+            // Calculate the intermediate 16-bit result to accurately catch the Half-Carry
+            int intermediateResult = Ac + correction;
+        
+            byte f = (byte)(registers[F] & ~( Fl_H | Fl_C | Fl_Z | Fl_S |Fl_PV ) );
+
+            if( !(GetFlag( Fl_N ) || GetFlag( Fl_H ) )) {
                 if( GetFlag( Fl_N ) && GetFlag( Fl_H )) {
-                    if( (a & 0x0F) < 6 )
+                    if( (Ac & 0x0F) < 6 )
                         f |= Fl_H;
                 } else {
-                    if( (a & 0x0F) >= 0x0A )
+                    if( (Ac & 0x0F) >= 0x0A )
                         f |= Fl_H;
                 }
             }
-    
-            switch( t ) {
-                case 1:
-                    a += (byte)(GetFlag( Fl_N) ? 0xFA:0x06 ); // -6:6
-                    break;              
-                case 2:                 
-                    a += (byte)(GetFlag( Fl_N) ? 0xA0:0x60 ); // -0x60:0x60
-                    break;              
-                case 3:                 
-                    a += (byte)(GetFlag( Fl_N) ? 0x9A:0x66 ); // -0x66:0x66
-                    break;
-            }
-    
-            if( ( a & 0x80 ) > 0 )
-                f |= Fl_S;
-            if( a == 0 )
+
+            Ac = (byte)intermediateResult;
+
+            if( newCarry )
+                f |= Fl_C;
+            if( Ac == 0 )
                 f |= Fl_Z;
-            if( Parity(a) )
+            if( (Ac & 0x80) != 0 )
+                f |= Fl_S;
+            if( Parity(Ac) )
                 f |= Fl_PV;
 
-          //flags.X = a & BIT_5;
-          //flags.Y = a & BIT_3;
-
-            registers[A] = a;
             registers[F] = f;
-           
+            // FlagN is strictly UNTOUCHED by DAA
 #if (DEBUG)
             Log("DAA");
 #endif
@@ -4170,6 +4178,12 @@ namespace z80
             return (byte)sum;
         }
 
+        /// <summary>
+        /// In the Z80 architecture, the P/V flag is set to 1
+        /// for even parity and cleared to 0 for odd parity.
+        /// Even Parity: Because zero is an even number,
+        /// the total count of set bits is even.
+        /// </summary>
         private static bool Parity(ushort value)
         {
             var parity = true;
