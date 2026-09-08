@@ -3971,7 +3971,6 @@ namespace z80
         /// Add the given byte to the accumulator. Set the flags
         /// </summary>
         /// <param name="n">Value to add to the accumulator.</param>
-        /// <returns>The resulting value.</returns>
         public void Add(byte n)
         {
             var  a   = registers[A];
@@ -3998,31 +3997,40 @@ namespace z80
             Ac    = sum;
         }
 
+        /// <summary>
+        /// Gemini corrections.
+        /// </summary>
         public void Adc(byte n)
         {
             byte a   = registers[A];
             int  c   = ((registers[F] & Fl_C) > 0 ) ? 1 : 0;
             int  sum = a + n + c;
 
+            // Safely cast to an 8-bit result right away
+            byte result = (byte)sum;
+
+            // Clear existing flags (keeping Fl_N cleared as required by ADC)
             var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N | Fl_X | Fl_Y ));
 
-            if( (sum & 0x80) > 0)
+            if ((result & 0x80) != 0)
                 f |= Fl_S;
-            if( (byte)sum == 0)
+            if (result == 0)
                 f |= Fl_Z;
-            if( ((a ^ n ^ c ^ sum ) & 0x10) != 0 )
-               f |= Fl_H;
-            if( ((a ^ sum ) & ( n+c ^ sum ) & 0x80 ) != 0 )
+            if (((a ^ n ^ sum) & 0x10) != 0)
+                f |= Fl_H;
+            if (((a ^ sum) & (n ^ sum) & 0x80) != 0)
                 f |= Fl_PV;
-            if( sum > 0xFF) 
+            if (sum > 0xFF) 
                 f |= Fl_C;
 
-            Ac = (byte)sum;
-            // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
-            if ((Ac & Fl_X) != 0) f |= Fl_X; 
-            if ((Ac & Fl_Y) != 0) f |= Fl_Y;
+            // Save back to accumulator
+            registers[A] = result;
 
-            Flags = f;
+            // Undocumented bits 3 (Fl_X) and 5 (Fl_Y) copy directly from the result
+            if ((result & Fl_X) != 0) f |= Fl_X; 
+            if ((result & Fl_Y) != 0) f |= Fl_Y;
+
+            registers[F] = f;
         }
 
         /// <summary>
@@ -4034,6 +4042,9 @@ namespace z80
             registers[A] = Cmp( n );
         }
 
+        /// <summary>
+        /// Gemini corrections.
+        /// </summary>
         public void Sbc(byte n)
         {
             var a    = registers[A];
@@ -4048,30 +4059,20 @@ namespace z80
             // Clear existing flags (keeping any unmentioned flags like unused bits if they exist)
             var f = (byte)(registers[F] & ~(Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_X | Fl_Y));
 
-            // Sign flag tracks bit 7 of the actual 8-bit result
             if ((result & 0x80) != 0) 
                 f |= Fl_S;
-        
-            // Zero flag checks the 8-bit wrapped result
             if (result == 0) 
                 f |= Fl_Z;
-        
-            // Half-Carry tracks borrows across bit 4 boundary
             if (((a ^ n ^ diff) & 0x10) != 0)
                f |= Fl_H;
-       
-            // Overflow tracks signed boundary crossings (Pos - Neg = Neg, or Neg - Pos = Pos)
             if (((a ^ n) & (a ^ diff) & 0x80) != 0)
                 f |= Fl_PV;
-        
-            // SBC is a subtraction instruction
             f |= Fl_N;
 
             // Carry triggers if the absolute subtraction drops below 0 unsigned
             if (diff < 0) 
                 f |= Fl_C;
 
-            // Save back to accumulator
             registers[A] = result; 
 
             // Undocumented bits 3 (Fl_X) and 5 (Fl_Y) copy directly from the result
@@ -4079,35 +4080,6 @@ namespace z80
             if ((result & Fl_Y) != 0) f |= Fl_Y;
 
             registers[F] = f;
-        }
-
-        public void Sbc2(byte n)
-        {
-            var a    = registers[A];
-            var c    = ((registers[F] & Fl_C) > 0 ) ? 1 : 0;
-            var diff = a - n - c;
-
-            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_X | Fl_Y ));
-
-            if ((diff & 0x80) > 0) 
-                f |= Fl_S;
-            if (diff == 0) 
-                f |= Fl_Z;
-            if( ((a ^ n ^ c ^ diff ) & 0x10) != 0 )
-               f |= Fl_H;
-            if (((a ^ (n-c)) & (a ^ diff) & 0x80) != 0)
-                f |= Fl_PV;
-            f |= Fl_N;
-
-            if (diff < 0 ) 
-                f |= Fl_C;
-
-            Ac = (byte)diff;
-            // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
-            if ((Ac & Fl_X) != 0) f |= Fl_X; 
-            if ((Ac & Fl_Y) != 0) f |= Fl_Y;
-
-            Flags = f;
         }
 
         private void And(byte n)
@@ -4122,6 +4094,8 @@ namespace z80
                 f |= Fl_Z;
             if (Parity(res)) 
                 f |= Fl_PV;
+            // CRITICAL FIX: The Z80 AND instruction always sets the Half-Carry flag to 1
+            f |= Fl_H;
 
             Ac = res;
             // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
@@ -4174,7 +4148,7 @@ namespace z80
         }
 
         /// <summary>
-        /// Basically Sub without the acc assignment.
+        /// Basically Sub without the acc assignment. Checked by Gemini
         /// </summary>
         /// <see cref="Sub(byte)"
         private byte Cmp(byte n)
@@ -4200,8 +4174,8 @@ namespace z80
                 f |= Fl_C;
 
             // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
-            if ((diff & Fl_X) != 0) f |= Fl_X; 
-            if ((diff & Fl_Y) != 0) f |= Fl_Y;
+            if ((n & Fl_X) != 0) f |= Fl_X; 
+            if ((n & Fl_Y) != 0) f |= Fl_Y;
 
             Flags = f;
 
