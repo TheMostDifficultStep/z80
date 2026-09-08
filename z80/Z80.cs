@@ -471,7 +471,7 @@ namespace z80
         
             byte f = (byte)(registers[F] & ~( Fl_H | Fl_C | Fl_Z | Fl_S |Fl_PV ) );
 
-            if( !(GetFlag( Fl_N ) || GetFlag( Fl_H ) )) {
+            if( !GetFlag( Fl_N ) || GetFlag( Fl_H ) ) {
                 if( GetFlag( Fl_N ) && GetFlag( Fl_H )) {
                     if( (Ac & 0x0F) < 6 )
                         f |= Fl_H;
