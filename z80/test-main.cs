@@ -341,6 +341,19 @@ namespace z80 {
             Cpu.Ac    = 0x70;
             Cpu.Parse();
             CmpF( z:false, s:true, h:false, pv:true, n:false, c:false );
+
+            // Self-Subtraction SBC A, A : carry clear
+            Cpu.Flags = 0;
+            Cpu.Ac    = 0x70;
+            Cpu.Sbc( 0x70 );
+            CmpF( z:true, s:false, h:false, pv:true, n:false, c:false );
+
+            // Self-Subtraction SBC A, A : carry set
+            Cpu.Flags = z80.Fl_C;
+            Cpu.Ac    = 0x70;
+            Cpu.Sbc( 0x70 );
+            CmpF( z:false, s:true, h:false, pv:false, n:false, c:true );
+
         }
 
         static void Main(string[] args)
