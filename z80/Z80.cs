@@ -59,6 +59,8 @@ namespace z80
         public const byte Fl_PV = 0x04;
         public const byte Fl_N  = 0x02;
         public const byte Fl_C  = 0x01;
+        public const byte Fl_X  = 0x20;
+        public const byte Fl_Y  = 0x08; // bit 3 (start at zero)
 
         /// <summary>
         /// This function is probably best used by secifying a SINGLE
@@ -435,71 +437,69 @@ namespace z80
             Sp = stack;
         }
 
+        /// <summary>
+        /// Took Gemini 3 tries, where I pointed out many problems. But at
+        /// last, here it is. >_<;; Looks a little like Rui F Ribeiro's
+        /// solution...  https://github.com/ruyrybeyro
+        /// </summary>
         public void Daa()
         {
-            byte correction = 0x00;
-            bool newCarry   = GetFlag( Fl_C );
+            int correction  = 0;
+            byte OldAc = Ac; 
+            bool oldC  = GetFlag(Fl_C);
+            bool oldH  = GetFlag(Fl_H);
+            bool oldN  = GetFlag(Fl_N);
 
-            byte upperNibble = (byte)(Ac >> 4);
-            byte lowerNibble = (byte)(Ac & 0x0F);
+            // 1. Determine adjustment value using an incrementing mask
+            if (oldH || (Ac & 0x0F) > 9) {
+                correction += 1;
+            }
+            if (oldC || Ac > 0x99) {
+                correction += 2;
+            }
 
-            if( GetFlag( Fl_N) ) {
-                // --- AFTER A SUBTRACTION OPERATION (N = 1) ---
-                if( GetFlag( Fl_C )) {
-                    correction |= 0x60;
-                }
-                if( GetFlag( Fl_H )) {
-                    correction |= 0x06;
-                }
-
-                // In subtraction, corrections are subtracted rather than added
-                // We can represent this by taking the two's complement of the correction
-                correction = (byte)(-(sbyte)correction);
+            // 2. Perform the mathematical adjustment based on operation type
+            if (!oldN) {
+                // Addition (N = 0)
+                if (correction == 1) Ac += 0x06;
+                if (correction == 2) Ac += 0x60;
+                if (correction == 3) Ac += 0x66;
             } else {
-                // --- AFTER AN ADDITION OPERATION (N = 0) ---
-                if( GetFlag( Fl_C ) || upperNibble > 9 || (upperNibble == 9 && lowerNibble > 9)) {
-                    correction |= 0x60;
-                    newCarry = true;
-                } 
-                if( GetFlag( Fl_H ) || lowerNibble > 9) {
-                    correction |= 0x06;
-                }
+                // Subtraction (N = 1)
+                if (correction == 1) Ac += 0xFA; // -0x06
+                if (correction == 2) Ac += 0xA0; // -0x60
+                if (correction == 3) Ac += 0x9A; // -0x66
             }
 
-            // Calculate the intermediate 16-bit result to accurately catch the Half-Carry
-            int intermediateResult = Ac + correction;
-        
-            byte f = (byte)(registers[F] & ~( Fl_H | Fl_C | Fl_Z | Fl_S |Fl_PV ) );
+            // 3. Clear flags to rebuild, leaving N completely UNTOUCHED
+            byte f = (byte)(registers[F] & ~(Fl_H | Fl_C | Fl_Z | Fl_S | Fl_PV | Fl_X | Fl_Y));
 
-            if( !GetFlag( Fl_N ) || GetFlag( Fl_H ) ) {
-                if( GetFlag( Fl_N ) && GetFlag( Fl_H )) {
-                    if( (Ac & 0x0F) < 6 )
-                        f |= Fl_H;
-                } else {
-                    if( (Ac & 0x0F) >= 0x0A )
-                        f |= Fl_H;
-                }
+            // 4. Calculate the strict Z80 Half-Carry hardware rules
+            if (oldN) {
+                if (oldH && (OldAc & 0x0F) < 6) f |= Fl_H;
+            } else {
+                if ((OldAc & 0x0F) >= 0x0A) f |= Fl_H;
             }
 
-            Ac = (byte)intermediateResult;
+            // 5. Calculate the Carry Flag (Will be set if correction block 2/3 hit OR if oldC was true)
+            if (oldC || correction >= 2) f |= Fl_C;
 
-            if( newCarry )
-                f |= Fl_C;
-            if( Ac == 0 )
-                f |= Fl_Z;
-            if( (Ac & 0x80) != 0 )
-                f |= Fl_S;
-            if( Parity(Ac) )
-                f |= Fl_PV;
+            // 6. Common ALU Flags
+            if (Ac == 0)          f |= Fl_Z;
+            if ((Ac & 0x80) != 0) f |= Fl_S;
+            if (Parity(Ac))       f |= Fl_PV;
+    
+            // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
+            if ((Ac & 0x08) != 0) f |= Fl_X; 
+            if ((Ac & 0x20) != 0) f |= Fl_Y;
 
             registers[F] = f;
-            // FlagN is strictly UNTOUCHED by DAA
+
 #if (DEBUG)
             Log("DAA");
 #endif
-            Wait(4); // 4 T states
+            Wait(4);
         }
-
         public void Parse()
         {
             if (Ports.NMI) {
@@ -1339,7 +1339,16 @@ namespace z80
                     {
                         // CPL
                         registers[A] ^= 0xFF;
-                        registers[F] |= Fl_H | Fl_N;
+                        byte f = (byte)(registers[F] & ~( Fl_X | Fl_Y ));
+
+                        if( (Ac & Fl_X ) != 0 )
+                            f |= Fl_X;
+                        if( (Ac & Fl_Y ) != 0 )
+                            f |= Fl_Y;
+
+                        f |= Fl_H | Fl_N;
+
+                        Flags = f;
 #if (DEBUG)
                         Log("CPL");
 #endif
@@ -1354,13 +1363,18 @@ namespace z80
                         //N (Add/Subtract): Reset (cleared to 0).
                         //S, Z, P/V (Sign, Zero, Parity/Overflow): Not affected.  (http://www.z80.info/z80syntx.htm)
 
-                        byte f = (byte)(registers[F] & ~( Fl_N | Fl_C | Fl_H ));
+                        byte f = (byte)(registers[F] & ~( Fl_N | Fl_C | Fl_H | Fl_X | Fl_Y ));
                         if( GetFlag( Fl_C ) ) {
                             f |= Fl_H;
                         } else {
                             f |= Fl_C;
                         }
-                        registers[F] = f;
+                        if( (Ac & Fl_X ) != 0 )
+                            f |= Fl_X;
+                        if( (Ac & Fl_Y ) != 0 )
+                            f |= Fl_Y;
+
+                        Flags = f;
 #if (DEBUG)
                         Log("CCF");
 #endif
@@ -1370,8 +1384,16 @@ namespace z80
                 case 0x37:
                     {
                         // SCF
-                        registers[F] = (byte)(registers[F] & ~( Fl_N | Fl_H ));
-                        registers[F] |= Fl_C;
+                        byte f = (byte)(registers[F] & ~( Fl_N | Fl_H | Fl_X | Fl_Y ));
+
+                        f |= Fl_C;
+
+                        if( (Ac & Fl_X ) != 0 )
+                            f |= Fl_X;
+                        if( (Ac & Fl_Y ) != 0 )
+                            f |= Fl_Y;
+
+                        Flags = f;
 #if (DEBUG)
                         Log("SCF");
 #endif
