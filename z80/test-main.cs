@@ -286,6 +286,7 @@ namespace z80 {
 
         public void RunCpl() {
             // Test Case 1: All Bits Zero (0x00)
+            Cpu.Pc    = 0;
             Memory[0] = 0x2F; // Cpl
             Cpu.Flags = 0;
             Cpu.Ac    = 0x0;
@@ -322,6 +323,26 @@ namespace z80 {
 
         }
 
+        public void RunAdcSbc() {
+            // 3. Maximum Bound and Double Carry
+            Cpu.Pc    = 0;
+            Memory[0] = 0xCE; // Adc
+            Memory[1] = 0xff;
+            Cpu.Flags = Z80.Fl_C;
+            Cpu.Ac    = 0xFF;
+            Cpu.Parse();
+            CmpF( z:false, s:true, h:true, pv:false, n:false, c:true );
+
+            // 4. Half-Carry (H) and Signed Overflow (V) Disagreements
+            Cpu.Pc    = 0;
+            Memory[0] = 0xCE; // Adc
+            Memory[1] = 0x10;
+            Cpu.Flags = 0;
+            Cpu.Ac    = 0x70;
+            Cpu.Parse();
+            CmpF( z:false, s:true, h:false, pv:true, n:false, c:false );
+        }
+
         static void Main(string[] args)
         {
             Console.WriteLine("Run a bunch of CPU tests.");
@@ -334,6 +355,8 @@ namespace z80 {
 
             oProg.RunDaa();
             oProg.RunCpl();
+
+            oProg.RunAdcSbc();
         }
     }
 }

@@ -459,16 +459,16 @@ namespace z80
             }
 
             // 2. Perform the mathematical adjustment based on operation type
-            if (!oldN) {
-                // Addition (N = 0)
-                if (correction == 1) Ac += 0x06;
-                if (correction == 2) Ac += 0x60;
-                if (correction == 3) Ac += 0x66;
-            } else {
+            if (oldN) {
                 // Subtraction (N = 1)
                 if (correction == 1) Ac += 0xFA; // -0x06
                 if (correction == 2) Ac += 0xA0; // -0x60
                 if (correction == 3) Ac += 0x9A; // -0x66
+            } else {
+                // Addition (N = 0)
+                if (correction == 1) Ac += 0x06;
+                if (correction == 2) Ac += 0x60;
+                if (correction == 3) Ac += 0x66;
             }
 
             // 3. Clear flags to rebuild, leaving N completely UNTOUCHED
@@ -490,8 +490,9 @@ namespace z80
             if (Parity(Ac))       f |= Fl_PV;
     
             // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
-            if ((Ac & 0x08) != 0) f |= Fl_X; 
-            if ((Ac & 0x20) != 0) f |= Fl_Y;
+            // Probably not necessary since I had them wrong and the test passed zexdoc anyway. 
+            if ((Ac & Fl_X) != 0) f |= Fl_X; 
+            if ((Ac & Fl_Y) != 0) f |= Fl_Y;
 
             registers[F] = f;
 
@@ -3977,7 +3978,7 @@ namespace z80
             int  raw = a + n;
             byte sum = (byte)raw;
 
-            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N ));
+            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N | Fl_X | Fl_Y));
             if( (sum & 0x80) > 0)
                 f |= Fl_S;
             if( sum == 0)
@@ -3989,8 +3990,12 @@ namespace z80
             if( raw > 0xFF)
                 f |= Fl_C;
 
-            registers[F] = f;
-            registers[A] = sum;
+            // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
+            if ((sum & Fl_X) != 0) f |= Fl_X; 
+            if ((sum & Fl_Y) != 0) f |= Fl_Y;
+
+            Flags = f;
+            Ac    = sum;
         }
 
         private void Adc(byte n)
@@ -3999,7 +4004,7 @@ namespace z80
             int  c   = ((registers[F] & Fl_C) > 0 ) ? 1 : 0;
             int  sum = a + n + c;
 
-            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N ));
+            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N | Fl_X | Fl_Y ));
 
             if( (sum & 0x80) > 0)
                 f |= Fl_S;
@@ -4011,6 +4016,10 @@ namespace z80
                 f |= Fl_PV;
             if( sum > 0xFF) 
                 f |= Fl_C;
+
+            // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
+            if ((Ac & Fl_X) != 0) f |= Fl_X; 
+            if ((Ac & Fl_Y) != 0) f |= Fl_Y;
 
             registers[F] = f;
             registers[A] = (byte)sum;
@@ -4031,7 +4040,7 @@ namespace z80
             var c    = ((registers[F] & Fl_C) > 0 ) ? 1 : 0;
             var diff = a - n - c;
 
-            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C ));
+            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_X | Fl_Y ));
 
             if ((diff & 0x80) > 0) 
                 f |= Fl_S;
@@ -4043,8 +4052,12 @@ namespace z80
                 f |= Fl_PV;
             f |= Fl_N;
 
-            if (diff < 0 )  // was diff > 0xFF
+            if (diff < 0 ) 
                 f |= Fl_C;
+
+            // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
+            if ((Ac & Fl_X) != 0) f |= Fl_X; 
+            if ((Ac & Fl_Y) != 0) f |= Fl_Y;
 
             registers[F] = f;
             registers[A] = (byte)diff;
@@ -4054,7 +4067,7 @@ namespace z80
         {
             var a   = registers[A];
             var res = (byte)(a & n);
-            var f   = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N  ));
+            var f   = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N | Fl_X | Fl_Y ));
 
             if ((res & 0x80) > 0) 
                 f |= Fl_S;
@@ -4063,15 +4076,19 @@ namespace z80
             if (Parity(res)) 
                 f |= Fl_PV;
 
-            registers[F] = f;
-            registers[A] = res;
+            Ac = res;
+            // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
+            if ((Ac & Fl_X) != 0) f |= Fl_X; 
+            if ((Ac & Fl_Y) != 0) f |= Fl_Y;
+
+            Flags = f;
         }
 
         private void Or(byte n)
         {
             var a   = registers[A];
             var res = (byte)(a | n);
-            var f   = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N  ));
+            var f   = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N | Fl_X | Fl_Y  ));
 
             if ((res & 0x80) > 0)
                 f |= Fl_S;
@@ -4080,15 +4097,19 @@ namespace z80
             if (Parity(res)) 
                 f |= Fl_PV;
 
-            registers[F] = f;
-            registers[A] = res;
+            Ac = res;
+            // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
+            if ((Ac & Fl_X) != 0) f |= Fl_X; 
+            if ((Ac & Fl_Y) != 0) f |= Fl_Y;
+
+            Flags = f;
         }
 
         private void Xor(byte n)
         {
             var a   = registers[A];
             var res = (byte)(a ^ n);
-            var f   = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N ));
+            var f   = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_N | Fl_X | Fl_Y ));
 
             if ((res & 0x80) > 0)
                 f |= Fl_S;
@@ -4097,8 +4118,12 @@ namespace z80
             if (Parity(res)) 
                 f |= Fl_PV;
 
-            registers[F] = f;
-            registers[A] = res;
+            Ac = res;
+            // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
+            if ((Ac & Fl_X) != 0) f |= Fl_X; 
+            if ((Ac & Fl_Y) != 0) f |= Fl_Y;
+
+            Flags = f;
         }
 
         /// <summary>
@@ -4111,7 +4136,7 @@ namespace z80
             int  raw  = a - n;
             byte diff = (byte)raw;
 
-            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C ));
+            var f = (byte)(registers[F] & ~( Fl_S | Fl_Z | Fl_H | Fl_PV | Fl_C | Fl_X | Fl_Y ));
 
             if( (diff & 0x80) > 0)
                f |= Fl_S;
@@ -4126,6 +4151,10 @@ namespace z80
 
             if (raw < 0)
                 f |= Fl_C;
+
+            // Undocumented bits 3 and 5 copy directly from the newly modified Accumulator
+            if ((diff & Fl_X) != 0) f |= Fl_X; 
+            if ((diff & Fl_Y) != 0) f |= Fl_Y;
 
             registers[F] = f;
 
