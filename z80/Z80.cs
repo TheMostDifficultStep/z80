@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO.Ports;
-using System.Security.Cryptography;
 using static z80.Z80;
 
 // ReSharper disable InconsistentNaming
@@ -29,9 +27,9 @@ namespace z80
         private const byte Ap = 15;
         private const byte I = 16;
         private const byte R = 17;
-        private const byte IX = 18;
+        private const byte IXH = 18;
         private const byte IXL = 19;
-        private const byte IY = 20;
+        private const byte IYH = 20;
         private const byte IYL = 21;
         private const byte SP = 22;
         private const byte PC = 24;
@@ -124,8 +122,8 @@ namespace z80
                   registers[SP + 1] = (byte)(value);      // Lo
             }
         }
-        public ushort Ix => (ushort)(registers[IXL] + (registers[IX] << 8));
-        public ushort Iy => (ushort)(registers[IYL] + (registers[IY] << 8));
+        public ushort Ix => (ushort)(registers[IXL] + (registers[IXH] << 8));
+        public ushort Iy => (ushort)(registers[IYL] + (registers[IYH] << 8));
         public ushort Bc {
             get { return (ushort)((registers[B] << 8) + registers[C]); }
             set {
@@ -245,8 +243,8 @@ namespace z80
             return;
         }
 
-        static readonly byte[] _rgIXLd = { B, C, D, E, IX, IXL, 0x80, A }; // DD two byte instr
-        static readonly byte[] _rgIYLd = { B, C, D, E, IY, IYL, 0x80, A }; // FD two byte instr
+        static readonly byte[] _rgIXLd = { B, C, D, E, IXH, IXL, 0x80, A }; // DD two byte instr
+        static readonly byte[] _rgIYLd = { B, C, D, E, IYH, IYL, 0x80, A }; // FD two byte instr
 
         /// <summary>
         /// Handle 2 byte instructions 0x64 & 0x65 for either
@@ -309,6 +307,21 @@ namespace z80
                 return;
             }
             Adc(registers[rgSrcMap[src]]);
+#if (DEBUG)
+            Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
+#endif
+            Wait(8);
+            return;
+        }
+
+        protected void DwSbcInstr( byte bInstr, byte[] rgSrcMap ) {
+            var src = (byte)( bInstr & 0x07);
+
+            if( src == 6 ) {
+                TryInsertMissingInstruction( 0x01, bInstr );
+                return;
+            }
+            Sbc(registers[rgSrcMap[src]]);
 #if (DEBUG)
             Log($"ADD {RName(A)}, " + $"{RName(rgSrcMap[src])}" );
 #endif
@@ -2057,15 +2070,15 @@ namespace z80
         private void AddIx(ushort value)
         {
             var sum = Add(Ix, value);
-            registers[IX] = (byte)(sum >> 8);
-            registers[IX + 1] = (byte)(sum & 0xFF);
+            registers[IXH] = (byte)(sum >> 8);
+            registers[IXH + 1] = (byte)(sum & 0xFF);
         }
 
         private void AddIy(ushort value)
         {
             var sum = Add(Iy, value);
-            registers[IY] = (byte)(sum >> 8);
-            registers[IY + 1] = (byte)(sum & 0xFF);
+            registers[IYH] = (byte)(sum >> 8);
+            registers[IYH + 1] = (byte)(sum & 0xFF);
         }
 
         private ushort Add(ushort value1, ushort value2)
@@ -3062,6 +3075,9 @@ namespace z80
                         case OpToken.Adc:
                             DwAdcInstr( mc, _rgIXLd );
                             return;
+                        case OpToken.Sbc:
+                            DwSbcInstr( mc, _rgIXLd );
+                            return;
                         case OpToken.Cp:
                             DwCmpInstr( mc, _rgIXLd );
                             return;
@@ -3076,8 +3092,8 @@ namespace z80
                 case 0x21:
                     {
                         // LD IX, nn
-                        registers[IX + 1] = Fetch();
-                        registers[IX] = Fetch();
+                        registers[IXH + 1] = Fetch();
+                        registers[IXH] = Fetch();
 #if (DEBUG)
                         Log($"LD IX, 0x{Ix:X4}");
 #endif
@@ -3134,8 +3150,8 @@ namespace z80
                     {
                         // LD IX, (nn)
                         var addr = Fetch16();
-                        registers[IX + 1] = mem[addr++];
-                        registers[IX] = mem[addr];
+                        registers[IXH + 1] = mem[addr++];
+                        registers[IXH] = mem[addr];
 #if (DEBUG)
                         Log($"LD IX, (0x{addr:X4})*");
 #endif
@@ -3146,8 +3162,8 @@ namespace z80
                     {
                         // LD (nn), IX
                         var addr = Fetch16();
-                        mem[addr++] = registers[IX + 1];
-                        mem[addr] = registers[IX];
+                        mem[addr++] = registers[IXH + 1];
+                        mem[addr] = registers[IXH];
 #if (DEBUG)
                         Log($"LD (0x{addr:X4}), IX");
 #endif
@@ -3158,8 +3174,8 @@ namespace z80
                 case 0xF9:
                     {
                         // LD SP, IX
-                        registers[SP] = registers[IX];
-                        registers[SP + 1] = registers[IX + 1];
+                        registers[SP] = registers[IXH];
+                        registers[SP + 1] = registers[IXH + 1];
 #if (DEBUG)
                         Log("LD SP, IX");
 #endif
@@ -3171,9 +3187,9 @@ namespace z80
                         // PUSH IX
                         var addr = Sp;
                         addr--;
-                        mem[addr] = registers[IX];
+                        mem[addr] = registers[IXH];
                         addr--;
-                        mem[addr] = registers[IX + 1];
+                        mem[addr] = registers[IXH + 1];
                         registers[SP + 1] = (byte)(addr & 0xFF);
                         registers[SP] = (byte)(addr >> 8);
 #if (DEBUG)
@@ -3186,8 +3202,8 @@ namespace z80
                     {
                         // POP IX
                         var addr = Sp;
-                        registers[IX + 1] = mem[addr++];
-                        registers[IX] = mem[addr++];
+                        registers[IXH + 1] = mem[addr++];
+                        registers[IXH] = mem[addr++];
                         registers[SP + 1] = (byte)(addr & 0xFF);
                         registers[SP] = (byte)(addr >> 8);
 #if (DEBUG)
@@ -3199,11 +3215,11 @@ namespace z80
                 case 0xE3:
                     {
                         // EX (SP), IX
-                        var h = registers[IX];
-                        var l = registers[IX + 1];
+                        var h = registers[IXH];
+                        var l = registers[IXH + 1];
                         var addr = Sp;
-                        registers[IX + 1] = mem[addr++];
-                        registers[IX] = mem[addr];
+                        registers[IXH + 1] = mem[addr++];
+                        registers[IXH] = mem[addr];
                         mem[addr--] = h;
                         mem[addr] = l;
 
@@ -3376,8 +3392,8 @@ namespace z80
                 case 0x23:
                     {
                         var val = Ix + 1;
-                        registers[IX] = (byte)(val >> 8);
-                        registers[IX + 1] = (byte)(val & 0xFF);
+                        registers[IXH] = (byte)(val >> 8);
+                        registers[IXH + 1] = (byte)(val & 0xFF);
 #if (DEBUG)
                         Log("INC IX");
 #endif
@@ -3387,8 +3403,8 @@ namespace z80
                 case 0x2B:
                     {
                         var val = Ix - 1;
-                        registers[IX] = (byte)(val >> 8);
-                        registers[IX + 1] = (byte)(val & 0xFF);
+                        registers[IXH] = (byte)(val >> 8);
+                        registers[IXH + 1] = (byte)(val & 0xFF);
 #if (DEBUG)
                         Log("DEC IX");
 #endif
@@ -3408,9 +3424,9 @@ namespace z80
                     }
                 case 0x24:
                     {
-                        var val = Inc( registers[IX] );
+                        var val = Inc( registers[IXH] );
 
-                        registers[IX ] = (byte)(val & 0xff);
+                        registers[IXH ] = (byte)(val & 0xff);
 #if (DEBUG)
                         Log("INC ixh - undoc");
 #endif
@@ -3430,9 +3446,9 @@ namespace z80
                     }
                 case 0x25:
                     {
-                        var val = Dec( registers[IX] );
+                        var val = Dec( registers[IXH] );
 
-                        registers[IX ] = (byte)(val & 0xff);
+                        registers[IXH ] = (byte)(val & 0xff);
 #if (DEBUG)
                         Log("Dec ixh - undoc");
 #endif
@@ -3453,7 +3469,7 @@ namespace z80
                     }
                 case 0x26:
                     {
-                        registers[IX] = Fetch();
+                        registers[IXH] = Fetch();
 #if (DEBUG)
                         Log("LD ixh, n");
 #endif
@@ -3477,7 +3493,7 @@ namespace z80
         }
 
         protected enum OpToken {
-            LD, Add, Sub, And, Or, Xor, Adc, Cp, Undef
+            LD, Add, Sub, Sbc, And, Or, Xor, Adc, Cp, Undef
         }
 
         protected class OpRange {
@@ -3498,11 +3514,12 @@ namespace z80
         protected void SetRanges( List<OpRange> rgOps) {
             rgOps.Add( new OpRange( 0x40, 0x7f, OpToken.LD  ) );
             rgOps.Add( new OpRange( 0x80, 0x87, OpToken.Add ) );
-            rgOps.Add( new OpRange( 0x90, 0x9f, OpToken.Sub ) );
+            rgOps.Add( new OpRange( 0x88, 0x8f, OpToken.Adc ) );
+            rgOps.Add( new OpRange( 0x90, 0x97, OpToken.Sub ) );
+            rgOps.Add( new OpRange( 0x98, 0x9f, OpToken.Sbc ) );
             rgOps.Add( new OpRange( 0xa0, 0xa7, OpToken.And ) );
             rgOps.Add( new OpRange( 0xa8, 0xaf, OpToken.Xor ) );
             rgOps.Add( new OpRange( 0xb0, 0xb7, OpToken.Or  ) );
-            rgOps.Add( new OpRange( 0x88, 0x8f, OpToken.Adc ) );
             rgOps.Add( new OpRange( 0xb8, 0xbf, OpToken.Cp  ) );
         }
 
@@ -3554,6 +3571,9 @@ namespace z80
                         case OpToken.Adc:
                             DwAdcInstr( mc, _rgIYLd );
                             return;
+                        case OpToken.Sbc:
+                            DwSbcInstr( mc, _rgIYLd );
+                            return;
                         case OpToken.Cp:
                             DwCmpInstr( mc, _rgIYLd );
                             return;
@@ -3568,8 +3588,8 @@ namespace z80
                 case 0x21:
                     {
                         // LD IY, nn
-                        registers[IY + 1] = Fetch();
-                        registers[IY] = Fetch();
+                        registers[IYH + 1] = Fetch();
+                        registers[IYH] = Fetch();
 #if (DEBUG)
                         Log($"LD IY, 0x{Iy:X4}");
 #endif
@@ -3627,8 +3647,8 @@ namespace z80
                     {
                         // LD IY, (nn)
                         var addr = Fetch16();
-                        registers[IY + 1] = mem[addr++];
-                        registers[IY] = mem[addr];
+                        registers[IYH + 1] = mem[addr++];
+                        registers[IYH] = mem[addr];
 #if (DEBUG)
                         Log($"LD IY, (0x{--addr:X4})*");
 #endif
@@ -3640,8 +3660,8 @@ namespace z80
                     {
                         // LD (nn), IY
                         var addr = Fetch16();
-                        mem[addr++] = registers[IY + 1];
-                        mem[addr] = registers[IY];
+                        mem[addr++] = registers[IYH + 1];
+                        mem[addr] = registers[IYH];
 #if (DEBUG)
                         Log($"LD (0x{--addr:X4}), IY");
 #endif
@@ -3651,8 +3671,8 @@ namespace z80
                 case 0xF9:
                     {
                         // LD SP, IY
-                        registers[SP] = registers[IY];
-                        registers[SP + 1] = registers[IY + 1];
+                        registers[SP] = registers[IYH];
+                        registers[SP + 1] = registers[IYH + 1];
 #if (DEBUG)
                         Log("LD SP, IY");
 #endif
@@ -3663,8 +3683,8 @@ namespace z80
                     {
                         // PUSH IY
                         var addr = Sp;
-                        mem[--addr] = registers[IY];
-                        mem[--addr] = registers[IY + 1];
+                        mem[--addr] = registers[IYH];
+                        mem[--addr] = registers[IYH + 1];
                         registers[SP + 1] = (byte)(addr & 0xFF);
                         registers[SP] = (byte)(addr >> 8);
 #if (DEBUG)
@@ -3677,8 +3697,8 @@ namespace z80
                     {
                         // POP IY
                         var addr = Sp;
-                        registers[IY + 1] = mem[addr++];
-                        registers[IY] = mem[addr++];
+                        registers[IYH + 1] = mem[addr++];
+                        registers[IYH] = mem[addr++];
                         registers[SP + 1] = (byte)(addr & 0xFF);
                         registers[SP] = (byte)(addr >> 8);
 #if (DEBUG)
@@ -3690,12 +3710,12 @@ namespace z80
                 case 0xE3:
                     {
                         // EX (SP), IY
-                        var h = registers[IY];
-                        var l = registers[IY + 1];
+                        var h = registers[IYH];
+                        var l = registers[IYH + 1];
                         var addr = Sp;
-                        registers[IY + 1] = mem[addr];
+                        registers[IYH + 1] = mem[addr];
                         mem[addr++] = l;
-                        registers[IY] = mem[addr];
+                        registers[IYH] = mem[addr];
                         mem[addr] = h;
 
 #if (DEBUG)
@@ -3865,8 +3885,8 @@ namespace z80
                 case 0x23:
                     {
                         var val = Iy + 1;
-                        registers[IY] = (byte)(val >> 8);
-                        registers[IY + 1] = (byte)(val & 0xFF);
+                        registers[IYH] = (byte)(val >> 8);
+                        registers[IYH + 1] = (byte)(val & 0xFF);
 #if (DEBUG)
                         Log("INC IY");
 #endif
@@ -3876,8 +3896,8 @@ namespace z80
                 case 0x2B:
                     {
                         var val = Iy - 1;
-                        registers[IY] = (byte)(val >> 8);
-                        registers[IY + 1] = (byte)(val & 0xFF);
+                        registers[IYH] = (byte)(val >> 8);
+                        registers[IYH + 1] = (byte)(val & 0xFF);
 #if (DEBUG)
                         Log("DEC IY");
 #endif
@@ -3897,9 +3917,9 @@ namespace z80
                     }
                 case 0x24:
                     {
-                        var val = Inc( registers[IY] );
+                        var val = Inc( registers[IYH] );
 
-                        registers[IY ] = (byte)(val & 0xff);
+                        registers[IYH ] = (byte)(val & 0xff);
 #if (DEBUG)
                         Log("Inc iyh - undoc");
 #endif
@@ -3920,9 +3940,9 @@ namespace z80
                     }
                 case 0x25:
                     {
-                        var val = Dec( registers[IY] );
+                        var val = Dec( registers[IYH] );
 
-                        registers[IY ] = (byte)(val & 0xff);
+                        registers[IYH ] = (byte)(val & 0xff);
 #if (DEBUG)
                         Log("Dec iyh - undoc");
 #endif
@@ -3943,7 +3963,7 @@ namespace z80
                     }
                 case 0x26:
                     {
-                        registers[IY] = Fetch();
+                        registers[IYH] = Fetch();
 #if (DEBUG)
                         Log("LD iyh, n");
 #endif
@@ -4352,7 +4372,7 @@ namespace z80
                 $"\n{registers[Bp]:X2}{registers[Cp]:X2} {registers[Dp]:X2}{registers[Ep]:X2} {registers[Hp]:X2}{registers[Lp]:X2} {(registers[Fp] & 0x80) >> 7}{(registers[Fp] & 0x40) >> 6}{(registers[Fp] & 0x20) >> 5}{(registers[Fp] & 0x10) >> 4}{(registers[Fp] & 0x08) >> 3}{(registers[Fp] & 0x04) >> 2}{(registers[Fp] & 0x02) >> 1}{registers[Fp] & 0x01} {registers[Ap]:X2}";
             ret += Environment.NewLine + Environment.NewLine + "I  R   IX   IY   SP   PC" + Environment.NewLine;
             ret +=
-                $"{registers[I]:X2} {registers[R]:X2} {registers[IX]:X2}{registers[IX + 1]:X2} {registers[IY]:X2}{registers[IY + 1]:X2} {registers[SP]:X2}{registers[SP + 1]:X2} {registers[PC]:X2}{registers[PC + 1]:X2} ";
+                $"{registers[I]:X2} {registers[R]:X2} {registers[IXH]:X2}{registers[IXH + 1]:X2} {registers[IYH]:X2}{registers[IYH + 1]:X2} {registers[SP]:X2}{registers[SP + 1]:X2} {registers[PC]:X2}{registers[PC + 1]:X2} ";
 
             ret += Environment.NewLine;
             return ret;
