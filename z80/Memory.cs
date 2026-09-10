@@ -29,6 +29,8 @@ namespace z80
             _ramStart = 0;
         }
 
+        public event Action<int> WriteTrap;
+
         /// <summary>
         /// Use this to access the array directly. I need the
         /// exceptions and not the "safe" access by our normal
@@ -101,6 +103,9 @@ namespace z80
                 // Zexdoc/Zexall are self modifying. 
 
                 try {
+                    if( iAddress == 0x200 ) {
+                        WriteTrap?.Invoke( iAddress );
+                    }
                     _memory[iAddress] = value;
                 } catch( IndexOutOfRangeException ) {
                 }
