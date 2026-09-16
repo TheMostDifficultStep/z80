@@ -101,12 +101,14 @@ namespace z80
                 // So I wrote this with the intent to keep the
                 // program out of it's own memory. Then I find
                 // Zexdoc/Zexall are self modifying. 
+                // Use the write trap for debugging...
+                // WriteTrap?.Invoke( iAddress );
 
                 try {
-                    if( iAddress == 0x200 ) {
-                        WriteTrap?.Invoke( iAddress );
-                    }
+                    //if( iAddress < _ramStart ) {
+                    //} else {
                     _memory[iAddress] = value;
+                    //}
                 } catch( IndexOutOfRangeException ) {
                 }
             }

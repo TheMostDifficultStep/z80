@@ -69,6 +69,7 @@ namespace z80
         private bool IFF1;
         private bool IFF2;
         private int interruptMode;
+        public bool _fFakeCpm = false;
 
         [Obsolete] [Flags]
         public enum Fl : byte
@@ -176,7 +177,28 @@ namespace z80
             set { registers[F] = value; }
         }
 
-        public bool Halt { get; private set; }
+        public enum HaltStates : int{
+            Running = 0,
+            Waiting = 1, // waiting for key for example
+            Stopped = 2  // true halt mode.
+        }
+
+        protected HaltStates _eHalt = HaltStates.Running;
+        public bool Halt { 
+            get         { return _eHalt > 0; }
+            private set { 
+                if( value == true ) {
+                    _eHalt = HaltStates.Stopped;
+                } else {
+                    _eHalt = HaltStates.Running;
+                } 
+            }
+        }
+
+        public HaltStates Stat {
+            get { return _eHalt; }
+            set { _eHalt = value; }
+        }
 
         void InterruptMode0() {
             // This is not quite correct, as it only runs a RST xx
@@ -440,12 +462,22 @@ namespace z80
             return;
         }
 
+        /// <summary>
+        ///  remember that calling 0005H can modify registers A, 
+        ///  B, C, D, H, and L. Only register E and the IX/IY 
+        ///  registers (on a Z80) are guaranteed to remain safe.
+        /// </summary>
         private void HandleBdosCall()
         {
             // C register contains the CP/M function code
             byte bBdosCode = registers[C]; 
 
             switch( bBdosCode ) {
+                case 1: // wait for single character... ^_^;; 
+                    //byte bChar3 = Ports.ReadPort( 0x01 );
+                    _eHalt = HaltStates.Waiting;
+                    return;
+
                 case 2: 
                     // Output single character from E register
                     Ports.WritePort( 0x02, registers[E] );
@@ -561,7 +593,7 @@ namespace z80
             if (Halt) 
                 return;
 
-            if( Pc == 0x05 ) {
+            if( _fFakeCpm && Pc == 0x05 ) {
                 HandleBdosCall();
                 if( Pc == 0x05 ) {
                     throw new InvalidOperationException( "return from bdos is bdos call" );
