@@ -1709,10 +1709,9 @@ namespace z80
                 case 0x18:
                     {
                         // order is important here
-                        var d = (sbyte)Fetch();
-                        var addr = Pc + d;
-                        registers[PC] = (byte)(addr >> 8);
-                        registers[PC + 1] = (byte)(addr);
+                        var d    = (sbyte)Fetch();
+                        var addr = (ushort)(Pc + d - 2); // FIX; -2
+                        Pc = addr;
 #if (DEBUG)
                         Log($"JR 0x{addr:X4}");
 #endif
@@ -1725,16 +1724,12 @@ namespace z80
                 case 0x38:
                     {
                         // order is important here
-                        var d = (sbyte)Fetch();
-                        var addr = Pc + d;
-                        if (JumpCondition((byte)(r & 3)))
-                        {
-                            registers[PC] = (byte)(addr >> 8);
-                            registers[PC + 1] = (byte)(addr);
+                        var d    = (sbyte)Fetch();
+                        var addr = (ushort)(Pc + d - 2); // FIX: orign was not subtr 2!!
+                        if (JumpCondition((byte)(r & 3))) {
+                            Pc = addr;
                             Wait(12);
-                        }
-                        else
-                        {
+                        } else {
                             Wait(7);
                         }
 #if (DEBUG)
@@ -1757,18 +1752,14 @@ namespace z80
                 case 0x10:
                     {
                         // order is important here
-                        var d = (sbyte)Fetch();
-                        var addr = Pc + d;
-                        var b = registers[B];
+                        var d    = (sbyte)Fetch();
+                        var addr = (ushort)(Pc + d - 2); // FIX: orig did not sub 2!!
+                        var b    = registers[B];
                         registers[B] = --b;
-                        if (b != 0)
-                        {
-                            registers[PC] = (byte)(addr >> 8);
-                            registers[PC + 1] = (byte)(addr);
+                        if (b != 0) {
+                            Pc = addr;
                             Wait(13);
-                        }
-                        else
-                        {
+                        } else {
                             Wait(8);
                         }
 #if (DEBUG)
@@ -3149,6 +3140,16 @@ namespace z80
                 case 0xCB:
                     {
                         ParseCB(0xDD);
+                        return;
+                    }
+                case 0x1e: // Undocumented instruct
+                    {
+                        // LD e, n
+                        registers[E] = Fetch();
+#if (DEBUG)
+                        Log($"LD e, 0x{registers[E]:X2}");
+#endif
+                        Wait(11);
                         return;
                     }
                 case 0x21:
